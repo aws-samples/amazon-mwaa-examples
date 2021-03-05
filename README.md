@@ -11,12 +11,14 @@ We want examples of as many use cases in this repository as possible! Please sub
 Example Directed Acyclic Graph (DAG) workflows that have been tested to work on Amazon MWAA.  Associated requirements.txt will be referenced to the entry in the next section. See [Amazon MWAA documentation](https://docs.aws.amazon.com/mwaa/latest/userguide/configuring-dag-folder.html) for details. 
 
 * [Move your Apache Airflow Connections and Variables to AWS Secrets Manager](dags/metadb_to_secrets_manager)
+* [Amazon Managed Workflows for Apache Airflow (MWAA) and Amazon EMR](dags/emr_job)
 
 ### Requirements.txt
 
 Sometimes getting the right combination of Python libraries is tricky. This repository is here to help. See [Amazon MWAA documentation](https://docs.aws.amazon.com/mwaa/latest/userguide/working-dags-dependencies.html) for details. 
 
-* 
+* [Amazon Backport Providers](requirements/amazon_backport)
+* [GCP Backport Providers](requirements/gcp_backport)
 
 ### Plugins
 
