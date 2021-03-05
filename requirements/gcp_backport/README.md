@@ -1,4 +1,4 @@
-### Amazon Managed Workflows for Apache Airflow (MWAA) GCP Backport Providers
+### Amazon Managed Workflows for Apache Airflow (MWAA) and GCP Backport Providers
 
 Use Amazon Managed Workflows for Apache Airflow (MWAA) with Apache Airflow GCP backport providers.
 
