@@ -1,11 +1,44 @@
-## My Project
+## Amazon Managed Workflows for Apache Airflow (MWAA) Examples
 
-TODO: Fill this README out!
+This repository contains example DAGs, requirements.txt, plugins, and CloudFormation templates focused on Amazon MWAA.  Since Amazon MWAA is running open-source Apache Airflow many of the contributions will be applicable for self-managed implementations as well.
 
-Be sure to:
+### Contributing
 
-* Change the title in this README
-* Edit your repository description on GitHub
+We want examples of as many use cases in this repository as possible! Please submit a Pull Request if you would like to add something.
+
+### DAG Files
+
+Example Directed Acyclic Graph (DAG) workflows that have been tested to work on Amazon MWAA.  Associated requirements.txt will be referenced to the entry in the next section. See [Amazon MWAA documentation](https://docs.aws.amazon.com/mwaa/latest/userguide/configuring-dag-folder.html) for details. 
+
+* [Move your Apache Airflow Connections and Variables to AWS Secrets Manager](dags/metadb_to_secrets_manager)
+
+### Requirements.txt
+
+Sometimes getting the right combination of Python libraries is tricky. This repository is here to help. See [Amazon MWAA documentation](https://docs.aws.amazon.com/mwaa/latest/userguide/working-dags-dependencies.html) for details. 
+
+* 
+
+### Plugins
+
+Most Airflow community plugins will work fine on Amazon MWAA.  This repository is for specific examples that have been testing on the service. See [Amazon MWAA documentation](https://docs.aws.amazon.com/mwaa/latest/userguide/configuring-dag-import-plugins.html) for details. 
+
+* 
+
+### CloudFormation
+
+Example CloudFormation templates for Amazon MWAA.  See [AWS CloudFormation documentation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-mwaa-environment.html) for details.
+
+* 
+
+### IAM Policies
+
+Example AWS IAM Policy definitions.  See [Amazon MWAA documentation](https://docs.aws.amazon.com/mwaa/latest/userguide/manage-access.html) for details. 
+
+* 
+
+### Setup for the examples
+
+These examples all assume a working [Amazon MWAA environment](https://aws.amazon.com/managed-workflows-for-apache-airflow/).
 
 ## Security
 
