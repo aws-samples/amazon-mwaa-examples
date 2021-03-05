@@ -21,7 +21,7 @@ configured on your AWS account.
 ### Requirements.txt needed
 
 If using the 2.0 version on 1.10.12 use:
-* [requirements/1.10/amazon_backport](../../requirements/1.10/amazon_backport)
+* [requirements/amazon_backport](../../requirements/amazon_backport)
 
 ### Plugins needed 
 
