@@ -2,9 +2,17 @@
 
 This example reads from an existing Metadatabase and copies all connections and variables to AWS Secrets Manager
 
+### Versions Supported
+
+Apache Airflow 1.10.12
+
 ### Setup 
 
 Copy the file into your DAGs folder, and ensure you have connectivity to AWS Secrets Manager. For the latter, When using an AWS IAM role to connect to AWS Secrets Manager, either with Amazon MWAA’s Execution Role or an assumed role in Amazon EC2, you will need to provide AWS Secrets Manager access to that role via the [AWS IAM console](https://console.aws.amazon.com/iam/home#/roles).
+
+### Files
+
+[1.10/metadb_to_secrets_manager.py](1.10/metadb_to_secrets_manager.py)
 
 ### Requirements.txt needed
 
