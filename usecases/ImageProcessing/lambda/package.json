@@ -1,0 +1,12 @@
+{
+    "name": "process-thumbnails",
+    "version": "1.0.0",
+    "description": "Image processing",
+    "main": "thumbnail.js",
+    "repository": "",
+    "author": "Ramadoss",
+    "license": "MIT-0",
+    "dependencies": {
+        "resize-img": "^2.0.0"
+    }
+}
