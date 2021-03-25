@@ -14,7 +14,7 @@ Example Directed Acyclic Graph (DAG) workflows that have been tested to work on 
 * [Amazon Managed Workflows for Apache Airflow (MWAA) and Amazon EMR](dags/emr_job)
 
 ### Use cases
-This folder contains complete set of sample use cases including documentation, infrastructure as code and dependant resources. Follow the README.md in each use cases to get started.
+This [folder](./usecases) contains complete set of sample use cases including documentation, infrastructure as code and dependant resources. Follow the README.md in each use cases to get started.
 
 ### Requirements.txt
 
