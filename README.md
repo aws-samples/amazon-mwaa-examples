@@ -13,6 +13,9 @@ Example Directed Acyclic Graph (DAG) workflows that have been tested to work on 
 * [Move your Apache Airflow Connections and Variables to AWS Secrets Manager](dags/metadb_to_secrets_manager)
 * [Amazon Managed Workflows for Apache Airflow (MWAA) and Amazon EMR](dags/emr_job)
 
+### Use cases
+This [folder](./usecases) contains complete set of sample use cases including documentation, infrastructure as code and dependant resources. Follow the README.md in each use cases to get started.
+
 ### Requirements.txt
 
 Sometimes getting the right combination of Python libraries is tricky. This repository is here to help. See [Amazon MWAA documentation](https://docs.aws.amazon.com/mwaa/latest/userguide/working-dags-dependencies.html) for details. 
