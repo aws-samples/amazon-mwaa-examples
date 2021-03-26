@@ -13,8 +13,10 @@ Example Directed Acyclic Graph (DAG) workflows that have been tested to work on 
 * [Move your Apache Airflow Connections and Variables to AWS Secrets Manager](dags/metadb_to_secrets_manager)
 * [Amazon Managed Workflows for Apache Airflow (MWAA) and Amazon EMR](dags/emr_job)
 
-### Use cases
-This [folder](./usecases) contains complete set of sample use cases including documentation, infrastructure as code and dependant resources. Follow the README.md in each use cases to get started.
+### Use Cases
+This [folder](./usecases) contains complete set of sample use cases including documentation, infrastructure as code, and dependant resources. Follow the README.md in each use case to get started.
+
+* [Image Processing Pipeline](usecases/ImageProcessing)
 
 ### Requirements.txt
 
@@ -26,8 +28,6 @@ Sometimes getting the right combination of Python libraries is tricky. This repo
 ### Plugins
 
 Most Airflow community plugins will work fine on Amazon MWAA.  This repository is for specific examples that have been testing on the service. See [Amazon MWAA documentation](https://docs.aws.amazon.com/mwaa/latest/userguide/configuring-dag-import-plugins.html) for details. 
-
-* 
 
 ### CloudFormation
 
