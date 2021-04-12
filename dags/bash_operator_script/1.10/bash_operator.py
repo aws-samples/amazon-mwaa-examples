@@ -15,10 +15,12 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+import os
 from airflow import DAG
 from airflow.operators.bash_operator import BashOperator
 from airflow.utils.dates import days_ago
-with DAG(dag_id="bash_command_conf_dag", schedule_interval=None, catchup=False, start_date=days_ago(1)) as dag:
+DAG_ID = os.path.basename(__file__).replace(".py", "")
+with DAG(dag_id=DAG_ID, schedule_interval=None, catchup=False, start_date=days_ago(1)) as dag:
     cli_command = BashOperator(
         task_id="bash_command",
         bash_command='{{ dag_run.conf["command"] if dag_run else "" }}'
