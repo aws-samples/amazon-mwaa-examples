@@ -1,4 +1,4 @@
-## Amazon Managed Workflows for Apache Airflow (MWAA) and Bash Operator
+## Interactive Commands with Amazon Managed Workflows for Apache Airflow (MWAA) and Bash Operator
 This script serves as an example of how to run a bash operator in Amazon MWAA programmatically using the MWAA CLI API. This can be useful for debugging plugins or dependencies. 
 
 ### Versions Supported
