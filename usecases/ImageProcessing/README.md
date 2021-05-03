@@ -1,6 +1,6 @@
 ## Airflow sample image processing pipeline with Airflow 1.10.12
 
-This is an Ariflow verion of image processing workflow in [workshop](https://image-processing.serverlessworkshops.io/)
+This is an Airflow verion of image processing workflow in [workshop](https://image-processing.serverlessworkshops.io/)
 
 ## AWS Services Used
 
