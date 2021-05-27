@@ -17,7 +17,8 @@ Example Directed Acyclic Graph (DAG) workflows that have been tested to work on 
 ### Use Cases
 This [folder](./usecases) contains complete set of sample use cases including documentation, infrastructure as code, and dependant resources. Follow the README.md in each use case to get started.
 
-* [Image Processing Pipeline](usecases/ImageProcessing)
+* [Image Processing Pipeline](usecases/image-processing)
+* [Amazon MWAA with AWS CodeArtifact for Python dependencies](usecases/mwaa-with-codeartifact)
 
 ### Requirements.txt
 

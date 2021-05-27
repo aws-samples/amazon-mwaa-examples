@@ -1,0 +1,14 @@
+*.swp
+package-lock.json
+__pycache__
+.pytest_cache
+.venv
+venv/
+*.egg-info
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
