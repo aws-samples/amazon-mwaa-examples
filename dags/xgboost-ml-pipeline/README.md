@@ -236,7 +236,7 @@ Finally, we'll define the dependencies
     # set the dependencies between tasks
     process_task >> train_task >> endpoint_deploy_task
 ```
-Security
+## Security
 See [CONTRIBUTING](/CONTRIBUTING.md#security-issue-notifications) for more information.
 
 ## License
