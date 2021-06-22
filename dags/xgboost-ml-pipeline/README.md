@@ -18,7 +18,7 @@ Copy the [mwaa-customer-churn-dag.py](2.0/mwaa-customer-churn-dag.py) file from 
 
 ### Requirements.txt needed
 
-Copy the [requirements.txt](requirements/2.0/requirements.txt file from the xgboost-ml-pipeline/requirements/2.0/ folder to the MWAA requirements file S3 location.
+Copy the [requirements.txt](requirements/2.0/requirements.txt) file from the xgboost-ml-pipeline/requirements/2.0/ folder to the MWAA requirements file S3 location.
 
 ### Plugins needed 
 
