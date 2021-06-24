@@ -4,15 +4,12 @@ This example demonstrates how to orchestrate an ML pipeline that uses Glue to pr
 
 ### Versions Supported
 
-Apache Airflow 2.0.2 on Amazon MWAA
+Apache Airflow 2.0.2 on Amazon MWAA. Apache Airflow 1.10.12 compatible code is also provided.
 
-### Common Setup
+### Setup
 
 Copy the [customer-churn.csv](data/customer-churn.csv) file to an S3 location.
 Copy the [glue_etl.py](glue/glue_etl.py) file to an S3 location.
-
-### 2.0 Setup
-
 Update the [config.py](2.0/config.py) from the xgboost-ml-pipeline/2.0/ folder with your custom values. Copy the updated config.py file into your dags folder.
 Copy the [mwaa-customer-churn-dag.py](2.0/mwaa-customer-churn-dag.py) file from the xgboost-ml-pipeline/2.0/ folder into your dags folder.
 
