@@ -2,9 +2,17 @@
 
 This example demonstrates how to orchestrate an ML pipeline that uses Glue to preprocess a dataset and the XGBoost algorithm in Sagemaker to train a model and deploy an endpoint.
 
+### Blog
+
+This code is intended to support the AWS blog post: [Orchestrate XGBoost ML Pipelines with Managed Workflows for Apache Airflow](https://aws.amazon.com/blogs/machine-learning/orchestrate-xgboost-ml-pipelines-with-amazon-managed-workflows-for-apache-airflow/)
+
 ### Versions Supported
 
 Apache Airflow 2.0.2 on Amazon MWAA. Apache Airflow 1.10.12 compatible code is also provided.
+
+### Airflow configuration options
+
+The "core.enable_xcom_pickling" parameter must be set to "True" in the Airflow configuration options. If this parameter is not set you'll receive the error "TypeError: Object of type datetime is not JSON serializable" when attempting to export the model to S3.
 
 ### Setup
 
