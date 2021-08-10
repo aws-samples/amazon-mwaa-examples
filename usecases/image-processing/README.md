@@ -37,7 +37,7 @@ aws s3api put-public-access-block --bucket {bucket_name} --public-access-block-c
 ```
 - Copy requirements to S3. 
 
-aws s3api put-object --bucket {bucket_name} --key requirements.txt --body dags/v2.0/requirements.txt --output text
+aws s3api put-object --bucket {bucket_name} --key requirements.txt --body dags/2.0/requirements.txt --output text
 ```
 
 Note down the version number from the last command. This will be used during next step.
@@ -53,7 +53,7 @@ sam deploy --stack-name MWAA-image-processing -g
 ```
 - Copy the dag and images(to be tested) to the same S3Bucket
 ```
-aws s3 cp dags/v2.0/image_processing.py s3://{bucket_name}/dags/image-processing.py
+aws s3 cp dags/2.0/image_processing.py s3://{bucket_name}/dags/image-processing.py
 
 aws s3 cp images s3://{bucket_name}/images --recursive
 

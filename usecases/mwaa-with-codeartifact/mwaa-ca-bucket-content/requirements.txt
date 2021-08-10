@@ -1,0 +1,2 @@
+-r /usr/local/airflow/dags/codeartifact.txt
+numpy==1.20.3
