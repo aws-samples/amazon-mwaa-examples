@@ -22,42 +22,44 @@ This is an Ariflow verion of image processing workflow in [workshop](https://ima
 
 ## How to Deploy
 
-- Create Rekognition collections
+### 1. Create Rekognition collections
 ``` 
 aws rekognition create-collection --collection-id image_processing
 ```
-- Create S3 Bucket to store Dags, Requirement.txt and plugins. 
+### 2. Create S3 Bucket to store Dags, Requirement.txt and plugins. 
 ```
 aws s3api create-bucket --bucket {bucket_name} --region {region}
 aws s3api put-bucket-versioning --bucket {bucket_name} --versioning-configuration Status=Enabled
 
 aws s3api put-public-access-block --bucket {bucket_name} --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 
-
 ```
-- Copy requirements to S3. 
-
+### 3. Copy requirements to S3
+```
 aws s3api put-object --bucket {bucket_name} --key requirements.txt --body dags/2.0/requirements.txt --output text
 ```
 
 Note down the version number from the last command. This will be used during next step.
 
-- Deploy the SAM template
+### 4. Deploy the SAM template
 ```
 sam build
 sam deploy --stack-name MWAA-image-processing -g
 
 ```
-- Replace TABLE_NAME with Stack Output.DynamoDBTableName and LAMBDA_FN_NAME with Stack Output.LambdaFunctionName in dags/image-processing.py
 
-```
-- Copy the dag and images(to be tested) to the same S3Bucket
+### 5. Copy dag and images
+
+Replace TABLE_NAME with Stack Output.DynamoDBTableName and LAMBDA_FN_NAME with Stack Output.LambdaFunctionName in dags/image-processing.py. Copy the dag and images(to be tested) to the S3 Bucket created in Step 2
+
 ```
 aws s3 cp dags/2.0/image_processing.py s3://{bucket_name}/dags/image-processing.py
 
 aws s3 cp images s3://{bucket_name}/images --recursive
 
 ```
+
+## Access Airflow UI
 
 - Access Airflow UI. The webserver URL will be in the output of the cloudformation template
 
@@ -72,7 +74,7 @@ aws s3 cp images s3://{bucket_name}/images --recursive
 }
 ```
 
-- Useful cli commands while testing
+## Useful cli commands while testing
 ```
 aws rekognition list-faces    --collection-id image_processing
 
