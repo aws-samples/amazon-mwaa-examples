@@ -35,8 +35,7 @@ aws s3api put-public-access-block --bucket {bucket_name} --public-access-block-c
 
 
 ```
-- Copy requirements and Dags to S3. 
-aws s3 cp dags/v2.0/image-processing.py s3://{bucket_name}/dags/image-processing.py
+- Copy requirements to S3. 
 
 aws s3api put-object --bucket {bucket_name} --key requirements.txt --body dags/v2.0/requirements.txt --output text
 ```
@@ -52,8 +51,10 @@ sam deploy --stack-name MWAA-image-processing -g
 - Replace TABLE_NAME with Stack Output.DynamoDBTableName and LAMBDA_FN_NAME with Stack Output.LambdaFunctionName in dags/image-processing.py
 
 ```
-- Copy the images(to be tested) to the same S3Bucket
+- Copy the dag and images(to be tested) to the same S3Bucket
 ```
+aws s3 cp dags/v2.0/image_processing.py s3://{bucket_name}/dags/image-processing.py
+
 aws s3 cp images s3://{bucket_name}/images --recursive
 
 ```
