@@ -30,9 +30,19 @@ aws rekognition create-collection --collection-id image_processing
 ```
 aws s3api create-bucket --bucket {bucket_name} --region {region}
 aws s3api put-bucket-versioning --bucket {bucket_name} --versioning-configuration Status=Enabled
+
 aws s3api put-public-access-block --bucket {bucket_name} --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 
+
 ```
+- Copy requirements and Dags to S3. 
+aws s3 cp dags/v2.0/image-processing.py s3://{bucket_name}/dags/image-processing.py
+
+aws s3api put-object --bucket {bucket_name} --key requirements.txt --body dags/v2.0/requirements.txt --output text
+```
+
+Note down the version number from the last command. This will be used during next step.
+
 - Deploy the SAM template
 ```
 sam build
@@ -40,10 +50,6 @@ sam deploy --stack-name MWAA-image-processing -g
 
 ```
 - Replace TABLE_NAME with Stack Output.DynamoDBTableName and LAMBDA_FN_NAME with Stack Output.LambdaFunctionName in dags/image-processing.py
-
-- Copy the dag file to dags directory configured in Airflow to look for Dags
-```
-aws s3 cp dags/image-processing.py s3://{bucket_name}/dags/image-processing.py
 
 ```
 - Copy the images(to be tested) to the same S3Bucket
