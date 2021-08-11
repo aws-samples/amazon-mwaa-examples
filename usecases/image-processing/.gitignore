@@ -1,3 +1,4 @@
 node_modules
 *.toml
 .DS_Store
+.aws-sam

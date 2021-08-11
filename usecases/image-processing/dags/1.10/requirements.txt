@@ -1,0 +1,2 @@
+boto3 >= 1.17.4
+apache-airflow-providers-amazon
