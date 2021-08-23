@@ -1,11 +1,12 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Transform: 'AWS::Serverless-2016-10-31'
+Transform: "AWS::Serverless-2016-10-31"
 
 Parameters:
-  RekgnitionCollectionId:
+  RekognitionCollectionId:
     Type: String
-    Description: Colllection Id Rekognition
+    Description: Collection Id Rekognition
     Default: image_processing
+
   S3Bucket:
     Type: String
     Description: S3Bucket Where the dags are stored
@@ -44,6 +45,7 @@ Parameters:
     Description: Airflow Version
     Type: String
     Default: 2.0.2
+
   RequirementsFileVersion:
     Description: Requirements file S3 object version
     Type: String
@@ -80,7 +82,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      AvailabilityZone: !Select [0, !GetAZs ""]
       CidrBlock: !Ref PublicSubnet1CIDR
       MapPublicIpOnLaunch: true
       Tags:
@@ -91,7 +93,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      AvailabilityZone: !Select [1, !GetAZs ""]
       CidrBlock: !Ref PublicSubnet2CIDR
       MapPublicIpOnLaunch: true
       Tags:
@@ -102,7 +104,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      AvailabilityZone: !Select [0, !GetAZs ""]
       CidrBlock: !Ref PrivateSubnet1CIDR
       MapPublicIpOnLaunch: false
       Tags:
@@ -113,7 +115,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      AvailabilityZone: !Select [1, !GetAZs ""]
       CidrBlock: !Ref PrivateSubnet2CIDR
       MapPublicIpOnLaunch: false
       Tags:
@@ -172,7 +174,6 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref PublicSubnet2
 
-
   PrivateRouteTable1:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -221,7 +222,6 @@ Resources:
       GroupName: "no-ingress-sg"
       GroupDescription: "Security group with no ingress rule"
       VpcId: !Ref VPC
-      VpcId: !Ref VPC
 
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -229,7 +229,7 @@ Resources:
       VpcId: !Ref VPC
       GroupDescription: !Sub "Security Group for Amazon MWAA Environment ${AWS::StackName}-MwaaEnvironment"
       GroupName: !Sub "airflow-security-group-${AWS::StackName}-MwaaEnvironment"
-  
+
   SecurityGroupIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -247,18 +247,19 @@ Resources:
   #####################################################################################################################
   # CREATE Lambda and DynamoDB
   #####################################################################################################################
-  RiderPhotoDDBTable:
+  UserTable:
     Type: AWS::DynamoDB::Table
     Properties:
       AttributeDefinitions:
         - AttributeName: UserId
           AttributeType: S
       ProvisionedThroughput:
-        ReadCapacityUnits: '3'
-        WriteCapacityUnits: '3'
+        ReadCapacityUnits: 3
+        WriteCapacityUnits: 3
       KeySchema:
-        - AttributeName: UserId #Unique 
+        - AttributeName: UserId #Unique
           KeyType: HASH
+
   ThumbnailLambdaFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -271,8 +272,7 @@ Resources:
       Timeout: 300
       Policies:
         Statement:
-          -
-            Sid: "WritetoS3ThumbnailBucket"
+          - Sid: "WritetoS3ThumbnailBucket"
             Effect: Allow
             Action:
               - s3:PutObject
@@ -297,7 +297,17 @@ Resources:
     Type: AWS::MWAA::Environment
     DependsOn: MwaaExecutionPolicy
     Properties:
-      Name: !Sub "${AWS::StackName}-MwaaEnvironment"
+      Name:
+        !Join [
+          "-",
+          [
+            "MwaaEnvironment",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+          ],
+        ]
       SourceBucketArn: !Sub "arn:aws:s3:::${S3Bucket}"
       ExecutionRoleArn: !GetAtt MwaaExecutionRole.Arn
       DagS3Path: dags
@@ -329,7 +339,6 @@ Resources:
           LogLevel: INFO
           Enabled: true
 
-
   MwaaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -342,11 +351,10 @@ Resources:
                 - airflow-env.amazonaws.com
                 - airflow.amazonaws.com
             Action:
-             - "sts:AssumeRole"
+              - "sts:AssumeRole"
       Path: "/service-role/"
 
   MwaaExecutionPolicy:
-    # DependsOn: EnvironmentBucket
     Type: AWS::IAM::ManagedPolicy
     Properties:
       Roles:
@@ -356,9 +364,7 @@ Resources:
         Statement:
           - Effect: Allow
             Action: airflow:PublishMetrics
-            Resource:
-              # - !GetAtt MwaaEnvironment.Arn
-              - !Sub "arn:aws:airflow:${AWS::Region}:${AWS::AccountId}:environment/${AWS::StackName}-MwaaEnvironment"
+            Resource: "*"
           - Effect: Deny
             Action: s3:ListAllMyBuckets
             Resource:
@@ -366,17 +372,9 @@ Resources:
           - Effect: Allow
             Action:
               - "s3:*"
-              # - "s3:GetBucket*"
-              # - "s3:List*"
             Resource:
               - !Sub "arn:aws:s3:::${S3Bucket}"
               - !Sub "arn:aws:s3:::${S3Bucket}/*"
-              # - !Sub "${EnvironmentBucket.Arn}/dags/*"
-          - Effect: Allow
-            Action:
-              - logs:DescribeLogGroups
-            Resource: "*"
-
           - Effect: Allow
             Action:
               - logs:CreateLogStream
@@ -387,8 +385,7 @@ Resources:
               - logs:GetLogGroupFields
               - logs:GetQueryResults
               - logs:DescribeLogGroups
-            Resource:
-              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:airflow-${AWS::StackName}*"
+            Resource: "*"
           - Effect: Allow
             Action: cloudwatch:PutMetricData
             Resource: "*"
@@ -418,7 +415,7 @@ Resources:
               - Rekognition:IndexFaces
               - Rekognition:SearchFacesByImage
             Resource:
-              - !Sub "arn:aws:rekognition:${AWS::Region}:${AWS::AccountId}:collection/${RekgnitionCollectionId}"
+              - !Sub "arn:aws:rekognition:${AWS::Region}:${AWS::AccountId}:collection/${RekognitionCollectionId}"
           - Effect: Allow
             Action:
               - Rekognition:DetectFaces
@@ -426,39 +423,101 @@ Resources:
           - Effect: Allow
             Action:
               - DynamoDB:BatchWriteItem
-            Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${RiderPhotoDDBTable}"
+            Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${UserTable}"
           - Effect: Allow
             Action:
               - Lambda:InvokeFunction
             Resource:
               - !GetAtt ThumbnailLambdaFunction.Arn
+
+  ##############################################################################
+  ## Rekognition
+  ##############################################################################
+
+  RekognitionLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Zip
+      InlineCode: |
+        import boto3
+        import cfnresponse
+        from botocore.exceptions import ClientError
+
+        rekognition = boto3.client('rekognition')
+        collection_id = 'image_processing'
+
+        def delete_collection(collection_id):
+          print('Attempting to delete collection ' + collection_id)
+          client=boto3.client('rekognition')
+          status_code=0
+          try:
+              response=client.delete_collection(CollectionId=collection_id)
+              status_code=response['StatusCode']
+              
+          except ClientError as e:
+              if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                  print ('The collection ' + collection_id + ' was not found ')
+              else:
+                  print ('Error other than Not Found occurred: ' + e.response['Error']['Message'])
+              status_code=e.response['ResponseMetadata']['HTTPStatusCode']
+          return(status_code)
+
+        def handler(event, context):
+          print(event)
+          responseData = {}
+          try:
+            request_type = event['RequestType']
+            if request_type == "Delete":
+                delete_collection(collection_id)
+            else:
+                rekognition.create_collection(CollectionId=collection_id)
+            responseData['Data'] = "SUCCESS"
+            cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, "CustomResourcePhysicalID")
+          except ClientError as e:
+            print("Unexpected error: %s" % e)
+            responseData['Data'] = "FAILED"
+            cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "CustomResourcePhysicalID")
+      Handler: index.handler
+      Policies:
+        - AWSLambdaExecute
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - rekognition:CreateCollection
+                - rekognition:DeleteCollection
+              Resource: "*"
+      Runtime: python3.8
+      Timeout: 300
+
+  RekognitionCollection:
+    Type: Custom::RekognitionCollection
+    Properties:
+      ServiceToken: !GetAtt RekognitionLambda.Arn
+
+  ThumbnailLambdaFunctionParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /mwaa-image-processing/LAMBDA_FN_NAME
+      Type: String
+      Value: !Ref ThumbnailLambdaFunction
+      Description: SSM Parameter for ThumbnailLambdaFunction name.
+
+  UserTableParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /mwaa-image-processing/TABLE_NAME
+      Type: String
+      Value: !Ref UserTable
+      Description: SSM Parameter for UserTable name.
+
 Outputs:
-  VPC:
-    Description: A reference to the created VPC
-    Value: !Ref VPC
-
-  PrivateSubnets:
-    Description: A list of the private subnets
-    Value: !Join [ ",", [ !Ref PrivateSubnet1, !Ref PrivateSubnet2 ]]
-
-  PrivateSubnet1:
-    Description: A reference to the private subnet in the 1st Availability Zone
-    Value: !Ref PrivateSubnet1
-
-  PrivateSubnet2:
-    Description: A reference to the private subnet in the 2nd Availability Zone
-    Value: !Ref PrivateSubnet2
-
-  NoIngressSecurityGroup:
-    Description: Security group with no ingress rule
-    Value: !Ref NoIngressSecurityGroup
-
   MwaaApacheAirflowUI:
     Description: MWAA Environment
-    Value: !Sub  "https://${MwaaEnvironment.WebserverUrl}"
+    Value: !Sub "https://${MwaaEnvironment.WebserverUrl}"
   LambdaFunctionName:
     Description: Lambda Function Name
-    Value: !Ref  ThumbnailLambdaFunction
+    Value: !Ref ThumbnailLambdaFunction
   DynamoDBTableName:
-    Description: Dynamo DB Table Name
-    Value: !Ref  RiderPhotoDDBTable
+    Description: DynamoDB Table Name
+    Value: !Ref UserTable
