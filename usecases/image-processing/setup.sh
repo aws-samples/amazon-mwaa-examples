@@ -18,6 +18,7 @@ else
   echo "S3 bucket already exists: $S3_BUCKET"
 fi
 aws s3api put-bucket-versioning --bucket $S3_BUCKET --versioning-configuration Status=Enabled
+aws s3api put-public-access-block --bucket $S3_BUCKET --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 
 echo "Copying files to S3"
 aws s3 cp ./dags/2.0/image_processing.py s3://$S3_BUCKET/dags/image-processing.py

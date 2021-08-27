@@ -446,12 +446,26 @@ Resources:
         rekognition = boto3.client('rekognition')
         collection_id = 'image_processing'
 
-        def delete_collection(collection_id):
-          print('Attempting to delete collection ' + collection_id)
-          client=boto3.client('rekognition')
+        def create_collection(collection_id):
+          print('Attempting to create collection ' + collection_id)
           status_code=0
           try:
-              response=client.delete_collection(CollectionId=collection_id)
+              response=rekognition.create_collection(CollectionId=collection_id)
+              status_code=response['StatusCode']
+              
+          except ClientError as e:
+              if e.response['Error']['Code'] == 'ResourceAlreadyExistsException':
+                  print ('The collection ' + collection_id + ' already exists ')
+                  return(0)
+              else:
+                  print ('Error other than Not Found occurred: ' + e.response['Error']['Message'])
+                  return(e.response['ResponseMetadata']['HTTPStatusCode'])
+
+        def delete_collection(collection_id):
+          print('Attempting to delete collection ' + collection_id)
+          status_code=0
+          try:
+              response=rekognition.delete_collection(CollectionId=collection_id)
               status_code=response['StatusCode']
               
           except ClientError as e:
@@ -470,13 +484,13 @@ Resources:
             if request_type == "Delete":
                 delete_collection(collection_id)
             else:
-                rekognition.create_collection(CollectionId=collection_id)
+                create_collection(collection_id)
             responseData['Data'] = "SUCCESS"
-            cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, "CustomResourcePhysicalID")
+            cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
           except ClientError as e:
             print("Unexpected error: %s" % e)
             responseData['Data'] = "FAILED"
-            cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "CustomResourcePhysicalID")
+            cfnresponse.send(event, context, cfnresponse.FAILED, responseData)
       Handler: index.handler
       Policies:
         - AWSLambdaExecute
