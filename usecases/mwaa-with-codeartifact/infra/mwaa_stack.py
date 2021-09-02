@@ -145,3 +145,4 @@ class MwaaStack(core.Stack):
             network_configuration=security_group_ids,
             logging_configuration=logging_configuration,
         )
+        mwaa_ca_env.node.add_dependency(mwaa_role)
