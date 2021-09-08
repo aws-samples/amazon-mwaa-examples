@@ -438,13 +438,13 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       PackageType: Zip
-      InlineCode: |
+      InlineCode: !Sub |
         import boto3
         import cfnresponse
         from botocore.exceptions import ClientError
 
         rekognition = boto3.client('rekognition')
-        collection_id = 'image_processing'
+        collection_id = '${RekognitionCollectionId}'
 
         def create_collection(collection_id):
           print('Attempting to create collection ' + collection_id)
