@@ -16,7 +16,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 from airflow import DAG, settings
- 
+
 from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 from sqlalchemy import text
@@ -35,15 +35,15 @@ This module also copies a configurabled days of task instance log from Cloud Wat
 # S3 bucket where the exported data reside
 S3_BUCKET = 'your_s3_bucket'
 # S3 prefix to look for exported data
-S3_KEY = 'data/migration/1.10.12_to_2.2.2/export/' 
+S3_KEY = 'data/migration/1.10.12_to_2.2.2/export/'
 # old environment name. Used to export CW log
-OLD_ENV_NAME='env1_10'
+OLD_ENV_NAME = 'env1_10'
 # new environment name. Used to export CW log
-NEW_ENV_NAME='env_2_2_2'
+NEW_ENV_NAME = 'env_2_2_2'
 # Days of task instance log to export; Only for failed state.
 TI_LOG_MAX_DAYS = 3
 
-S3_KEY = 'data/migration/1.10.12_to_2.2.2/export/' 
+S3_KEY = 'data/migration/1.10.12_to_2.2.2/export/'
 
 dag_id = 'db_import'
 
@@ -77,10 +77,13 @@ OBJECTS_TO_IMPORT = [
     [POOL_SLOTS, "slot_pool.csv"]
 ]
 
-#pause all dags before starting export
+# pause all dags before starting export
+
+
 def pause_dags():
     session = settings.Session()
-    session.execute(text(f"update dag set is_paused = true where dag_id != '{dag_id}';"))
+    session.execute(
+        text(f"update dag set is_paused = true where dag_id != '{dag_id}';"))
     session.commit()
     session.close()
 
@@ -92,24 +95,30 @@ def read_s3(filename):
     bucket.download_file(S3_KEY + filename, tempfile)
     return tempfile
 
+
 def activate_dags():
     session = settings.Session()
     tempfile = read_s3("active_dags.csv")
     conn = settings.engine.raw_connection()
     try:
-        session.execute(text(f"create table if not exists active_dags(dag_id varchar(250))"))
+        session.execute(
+            text(f"create table if not exists active_dags(dag_id varchar(250))"))
         session.commit()
-        with open(tempfile, 'r') as f:  
+        with open(tempfile, 'r') as f:
             cursor = conn.cursor()
-            cursor.copy_expert("COPY active_dags FROM STDIN WITH (FORMAT CSV, HEADER TRUE)", f)
+            cursor.copy_expert(
+                "COPY active_dags FROM STDIN WITH (FORMAT CSV, HEADER TRUE)", f)
             conn.commit()
-        session.execute(text(f"UPDATE dag d SET is_paused=false FROM active_dags ed WHERE d.dag_id = ed.dag_id;"))
+        session.execute(text(
+            f"UPDATE dag d SET is_paused=false FROM active_dags ed WHERE d.dag_id = ed.dag_id;"))
         session.commit()
     finally:
         conn.close()
 
-# Gets distinct dag, task and execution date up to the days in TI_LOG_MAX_DAYS for failed state. 
+# Gets distinct dag, task and execution date up to the days in TI_LOG_MAX_DAYS for failed state.
 # If you need all state, remove the condition from the query
+
+
 def getDagTasks():
     session = settings.Session()
     dagTasks = session.execute(f"select distinct ti.dag_id, ti.task_id, date(r.execution_date) as ed \
@@ -117,25 +126,27 @@ def getDagTasks():
             ti.dag_id=r.dag_id and ti.run_id = r.run_id and ti.state = 'failed' order by ti.dag_id, date(r.execution_date);").fetchall()
     return dagTasks
 
-# Task instance logs are created inside 'airflow-envname-Task' log group. Each instance of the task execution 
+# Task instance logs are created inside 'airflow-envname-Task' log group. Each instance of the task execution
 # creates a log stream. Log streams gets the name from the dag, task, execution date and the try number.
 # This function searches for log stream starting with dag, task, execution date in the old environment and copies them to new environment
 # This only copies 1 MB of data. For more logs, create code to iterate the get_log_event using next_token
+
 
 def create_logstreams():
 
     client = boto3.client('logs')
     dagTasks = getDagTasks()
-    oldlogGroupName=f"airflow-{OLD_ENV_NAME}-Task"
-    logGroupName=f"airflow-{NEW_ENV_NAME}-Task"
+    oldlogGroupName = f"airflow-{OLD_ENV_NAME}-Task"
+    logGroupName = f"airflow-{NEW_ENV_NAME}-Task"
 
     logEventFieds = ['timestamp', 'message']
 
     for row in dagTasks:
-        prefix = row['dag_id']+"/"+row['task_id'] + "/" + row["ed"].strftime('%Y-%m-%d')
+        prefix = row['dag_id']+"/"+row['task_id'] + \
+            "/" + row["ed"].strftime('%Y-%m-%d')
         # prefix search logs
-        streams =  client.describe_log_streams(
-            logGroupName = oldlogGroupName,
+        streams = client.describe_log_streams(
+            logGroupName=oldlogGroupName,
             logStreamNamePrefix=prefix,
         )
         # For each log strem, get the log events. If there are events, create a new log stream in the new env
@@ -144,22 +155,23 @@ def create_logstreams():
         for item in streams['logStreams']:
             streamName = item["logStreamName"]
             try:
-            # Get log events from old environment max of 1MB   
+                # Get log events from old environment max of 1MB
                 events = client.get_log_events(
                     logGroupName=oldlogGroupName,
-                    logStreamName= streamName,
+                    logStreamName=streamName,
                     startFromHead=True
                 )
-                # Put log events in new environment  
+                # Put log events in new environment
                 oldLogEvents = events["events"]
                 if len(oldLogEvents) > 0:
                     client.create_log_stream(
                         logGroupName=logGroupName,
-                        logStreamName= streamName
-                        )
+                        logStreamName=streamName
+                    )
                     eventsToInjest = []
                     for item in oldLogEvents:
-                        newItem = {key:value for key, value in item.items() if key in logEventFieds}
+                        newItem = {key: value for key,
+                                   value in item.items() if key in logEventFieds}
                         eventsToInjest.append(newItem)
 
                     client.put_log_events(
@@ -181,18 +193,19 @@ def importVariable():
         reader = csv.reader(csvfile)
         rows = []
         for row in reader:
-            rows.append(Variable(row[0],row[1]))
+            rows.append(Variable(row[0], row[1]))
         if len(rows) > 0:
             session.add_all(rows)
     session.commit()
     session.close()
+
 
 def load_data(**kwargs):
     query = kwargs['query']
     tempfile = read_s3(kwargs['file'])
     conn = settings.engine.raw_connection()
     try:
-        with open(tempfile, 'r') as f:  
+        with open(tempfile, 'r') as f:
             cursor = conn.cursor()
             cursor.copy_expert(query, f)
             conn.commit()
@@ -200,28 +213,29 @@ def load_data(**kwargs):
         conn.close()
         os.remove(tempfile)
 
+
 with DAG(dag_id=dag_id, schedule_interval=None, catchup=False, start_date=days_ago(1)) as dag:
-    
+
     pause_dags_t = PythonOperator(
         task_id="pause_dags",
         python_callable=pause_dags
     )
     with TaskGroup(group_id='import') as import_t:
         for x in OBJECTS_TO_IMPORT:
-            load_task= PythonOperator(
-                task_id = x[1],
-                python_callable = load_data,
-                op_kwargs={'query': x[0], 'file':x[1]},
+            load_task = PythonOperator(
+                task_id=x[1],
+                python_callable=load_data,
+                op_kwargs={'query': x[0], 'file': x[1]},
                 provide_context=True
             )
         load_variable_t = PythonOperator(
             task_id="variable",
             python_callable=importVariable
         )
-  
+
     load_task_instance_t = PythonOperator(
         task_id="load_ti",
-        op_kwargs={'query': TASK_INSTANCE_IMPORT, 'file':'task_instance.csv'},
+        op_kwargs={'query': TASK_INSTANCE_IMPORT, 'file': 'task_instance.csv'},
         provide_context=True,
         python_callable=load_data
     )
