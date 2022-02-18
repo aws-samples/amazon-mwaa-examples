@@ -79,7 +79,7 @@ def pause_dags():
     session = settings.Session()
     session.execute(text(f"update dag set is_paused = true where dag_id != '{dag_id}';"))
     session.commit()
-
+    session.close()
 
 # Reads the S3 export and stores in temp file
 
@@ -183,7 +183,7 @@ def importVariable():
         if len(rows) > 0:
             session.add_all(rows)
     session.commit()
-
+    session.close()
 def load_data(**kwargs):
     query = kwargs['query']
     tempfile = read_s3(kwargs['file'])

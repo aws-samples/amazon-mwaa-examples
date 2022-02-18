@@ -25,7 +25,6 @@ from sqlalchemy import text
 import csv
 from io import StringIO
 from smart_open import open
-from common_packages.db_read_stream import DbReadStream
 
 """
 The module iterates through the list of sql statement and table, reads data and stores in S3 as csv file.
@@ -83,30 +82,20 @@ OBJECTS_TO_EXPORT = [
 """
 The function streams the data read from the database in chunks to S3.
 """
-def stream_to_S3_fn(session, query, filename):
-    # Create the DB read stream,
-    # and configure to execute a query
-    db_read_stream = DbReadStream(
-        db=settings.engine.connect(),
-        query=query,
-    )
-    outkey = S3_KEY + filename + '.csv'
-
-    # Open a writable stream on S3
-    with open(f's3://{S3_BUCKET}/{outkey}', 'wb') as write_io:
-        # Iterate through the DB records, and write to the file on S3
-        total_bytes=0
+def stream_to_S3_fn(result, filename):
+    s3_file = f"s3://{S3_BUCKET}/{S3_KEY}{filename}.csv"
+    ## only get 10K rows at a time
+    REC_COUNT = 5000
+    outfileStr=""
+    with open(s3_file, 'wb') as write_io:
         while True:
-            max_bytes = 1024 * 1024
-            chunk = db_read_stream.read(size=max_bytes)
+            chunk = result.fetchmany(REC_COUNT)
             if not chunk:
                 break
-            curr_bytes=len(chunk)
-            total_bytes=total_bytes+curr_bytes
-            write_io.write(chunk)
-
-        # Cleanup
-        db_read_stream.close()
+            f = StringIO(outfileStr)
+            w = csv.writer(f)
+            w.writerows(chunk)
+            write_io.write(f.getvalue().encode("utf8"))
         write_io.close()
 
 # pause all active dags to have consistend and reliable copy of dag history exports
@@ -115,12 +104,14 @@ def pause_dags():
     print("session: ",str(session))
     session.execute(text(f"update dag set is_paused = true where dag_id != '{dag_id}';"))
     session.commit()
+    session.close()
 
 # Exports all active dags to S3; This data is used to unpause the dag in the new environment
 def export_active_dags():
     session = settings.Session()
-    print("session: ",str(session))
-    stream_to_S3_fn(session, "select * from active_dags", 'active_dags')
+    result = session.execute("select * from active_dags")
+    stream_to_S3_fn(result, 'active_dags')
+    session.close()
 
 # exports variable. Variable value is encrypted; 
 # So, the method uses the Variable class to decrypt the value and exports the data
@@ -140,7 +131,8 @@ def export_variable():
             w.writerow({k[0]:y.key, k[1]:y.get_val(), k[2]:y.is_encrypted, k[3]:None})
         outkey = S3_KEY + 'variable.csv'
         s3_client.put_object(Bucket=S3_BUCKET, Key=outkey, Body=f.getvalue())
- 
+    session.close()
+
     return "OK"
 
 # backsup the active dags before pausing them
@@ -150,12 +142,15 @@ def back_up_activedags():
     session.execute(text(f"drop table if exists active_dags;"))
     session.execute(text(f"create table active_dags as select dag_id from dag where not is_paused and is_active;"))
     session.commit()
-
+    session.close()
 # iterate OBJECTS_TO_EXPORT and call export
 def export_data(**kwargs):
     session = settings.Session()
     for x in OBJECTS_TO_EXPORT:
-        stream_to_S3_fn(session, x[0], x[1])
+        result = session.execute(text(x[0]))
+        stream_to_S3_fn(result, x[1])
+    
+    session.close()
 
     return "OK"
 

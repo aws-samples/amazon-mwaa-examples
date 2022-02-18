@@ -80,6 +80,7 @@ def pause_dags():
     session = settings.Session()
     session.execute(text(f"update dag set is_paused = true where dag_id != '{dag_id}';"))
     session.commit()
+    session.close()
 
 
 def read_s3(filename):
@@ -180,6 +181,7 @@ def importVariable():
         if len(rows) > 0:
             session.add_all(rows)
     session.commit()
+    session.close()
 
 
 def load_data(**kwargs):
