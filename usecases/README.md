@@ -4,3 +4,4 @@ Complete set of sample use cases including documentation, infrastructure as code
 
 1. [Image Processing](image-processing)
 2. [Amazon MWAA with AWS CodeArtifact for Python dependencies](mwaa-with-codeartifact)
+3. [Amazon MWAA metadata database migration](metadata-migration)
