@@ -24,9 +24,7 @@ import boto3
 from airflow.utils.task_group import TaskGroup
 import os
 import csv
-import boto3
 from airflow.models import Variable
-
 """
 This module imports data in to the table from the data exported by the export script
 This iterate through OBJECTS_TO_IMPORT which contains COPY statement and the csv file with data.
@@ -34,15 +32,13 @@ This module also copies a configurabled days of task instance log from Cloud Wat
 
 """
 # S3 bucket where the exported data reside
-S3_BUCKET = 'your_s3_bucket'
+S3_BUCKET = 'mwaa-migration-test'
 # S3 prefix to look for exported data
-S3_KEY = 'data/migration/1.10.12_to_2.0.2/export/'
+S3_KEY = 'data/migration/2.0.2_to_2.2.2/export/'
 # old environment name. Used to export CW log
-OLD_ENV_NAME = 'env1_10'
+OLD_ENV_NAME = 'env_2_0_2'
 # new environment name. Used to export CW log
-NEW_ENV_NAME = 'env_2_0_2'
-# Days of task instance log to export
-TI_LOG_MAX_DAYS = 3
+NEW_ENV_NAME = 'env_2_2_2'
 
 
 dag_id = 'db_import'
@@ -50,9 +46,13 @@ dag_id = 'db_import'
 DAG_RUN_IMPORT = "COPY \
 dag_run(dag_id, execution_date, state, run_id, external_trigger, \
 conf, end_date,start_date, run_type, last_scheduling_decision, \
-dag_hash, creating_job_id) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
+dag_hash, creating_job_id, queued_at, data_interval_start, data_interval_end) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 
-TASK_INSTANCE_IMPORT = "COPY task_instance FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
+TASK_INSTANCE_IMPORT = "COPY task_instance(task_id, dag_id, start_date, end_date, \
+duration, state, try_number, hostname, unixname, job_id, pool, \
+queue, priority_weight, operator, queued_dttm, pid, max_tries, executor_config,\
+pool_slots, queued_by_job_id, external_executor_id, trigger_id , \
+trigger_timeout, next_method, next_kwargs, run_id) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 
 TASK_FAIL_IMPORT = "COPY task_fail(task_id, dag_id, execution_date, \
  start_date, end_date, duration) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
@@ -67,11 +67,10 @@ POOL_SLOTS = "COPY slot_pool(pool, slots, description) FROM STDIN WITH (FORMAT C
 
 OBJECTS_TO_IMPORT = [
     [DAG_RUN_IMPORT, "dag_run.csv"],
-    [TASK_INSTANCE_IMPORT, "task_instance.csv"],
     [LOG_IMPORT, "log.csv"],
     [TASK_FAIL_IMPORT, "task_fail.csv"],
     [JOB_IMPORT, "job.csv"],
-    [POOL_SLOTS, "slot_pool.csv"],
+    [POOL_SLOTS, "slot_pool.csv"]
 ]
 
 # pause all dags before starting export
@@ -84,8 +83,6 @@ def pause_dags():
     session.commit()
     session.close()
 
-# Reads the S3 export and stores in temp file
-
 
 def read_s3(filename):
     resource = boto3.resource('s3')
@@ -93,9 +90,6 @@ def read_s3(filename):
     tempfile = f"/tmp/{filename}"
     bucket.download_file(S3_KEY + filename, tempfile)
     return tempfile
-
-# Activate all the dags which are active in the old environment
-# This is done by creating a temp table from the exported data and joining with the Dag table
 
 
 def activate_dags():
@@ -116,74 +110,6 @@ def activate_dags():
         session.commit()
     finally:
         conn.close()
-
-# Gets distinct dag, task and execution date up to the days in TI_LOG_MAX_DAYS and state is failed
-
-
-def getDagTasks():
-    session = settings.Session()
-    dagTasks = session.execute(f"select distinct dag_id, task_id, date(execution_date) as ed \
-        from task_instance where execution_date > current_date - {TI_LOG_MAX_DAYS} \
-        and state = 'failed' order by dag_id, date(execution_date);").fetchall()
-    return dagTasks
-
-# Task instance logs are created inside 'airflow-envname-Task' log group. Each instance of the task execution
-# creates a log stream. Log streams gets the name from the dag, task, execution date and the try number.
-# This function searches for log stream starting with dag, task, execution date in the old environment
-# for the failed task and copies them to new environment. If you want to copy all the task instance irrespective of state
-# remove 'state = 'failed'' from the query in getDagTasks.
-# This only copies 1 MB of data. For more logs, create code to iterate the get_log_event using next_token
-
-
-def create_logstreams():
-
-    client = boto3.client('logs')
-    dagTasks = getDagTasks()
-    oldlogGroupName = f"airflow-{OLD_ENV_NAME}-Task"
-    logGroupName = f"airflow-{NEW_ENV_NAME}-Task"
-    logEventFieds = ['timestamp', 'message']
-
-    for row in dagTasks:
-        prefix = row['dag_id']+"/"+row['task_id'] + \
-            "/" + row["ed"].strftime('%Y-%m-%d')
-        # prefix search logs
-        streams = client.describe_log_streams(
-            logGroupName=oldlogGroupName,
-            logStreamNamePrefix=prefix,
-        )
-        # For each log strem, get the log events. If there are events, create a new log stream in the new env
-        # and copy all the events
-        for item in streams['logStreams']:
-            streamName = item["logStreamName"]
-            try:
-                # Get log events from old environment max of 1MB
-                events = client.get_log_events(
-                    logGroupName=oldlogGroupName,
-                    logStreamName=streamName,
-                    startFromHead=True
-                )
-                # Put log events in new environment
-                oldLogEvents = events["events"]
-                if len(oldLogEvents) > 0:
-                    client.create_log_stream(
-                        logGroupName=logGroupName,
-                        logStreamName=streamName
-                    )
-                    eventsToInjest = []
-                    for item in oldLogEvents:
-                        newItem = {key: value for key,
-                                   value in item.items() if key in logEventFieds}
-                        eventsToInjest.append(newItem)
-
-                    client.put_log_events(
-                        logGroupName=logGroupName,
-                        logStreamName=streamName,
-                        logEvents=eventsToInjest
-                    )
-
-            except Exception as e:
-                print("Exception occured ", e)
-
 
 # variables are imported separately as they are encyrpted
 def importVariable():
@@ -234,16 +160,15 @@ with DAG(dag_id=dag_id, schedule_interval=None, catchup=False, start_date=days_a
             python_callable=importVariable
         )
 
-    load_CW_logs = PythonOperator(
-        task_id="load_CW_logs",
-        python_callable=create_logstreams
+    load_task_instance_t = PythonOperator(
+        task_id="load_ti",
+        op_kwargs={'query': TASK_INSTANCE_IMPORT, 'file': 'task_instance.csv'},
+        provide_context=True,
+        python_callable=load_data
     )
 
-    # Activating all dags at once might have a chance to trigger the dag runs immediately depending on when the
-    # the dag is run. it is better to activate them
     # activate_dags_t = PythonOperator(
     #     task_id="activate_dags",
     #     python_callable=activate_dags
     # )
-
-    pause_dags_t >> import_t >> load_CW_logs
+    pause_dags_t >> import_t >> load_task_instance_t
