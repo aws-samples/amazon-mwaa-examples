@@ -1,0 +1,16 @@
+crhelper-2.0.10.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+crhelper-2.0.10.dist-info/LICENSE,sha256=CeipvOyAZxBGUsFoaFqwkx54aPnIKEtm9a5u2uXxEws,10142
+crhelper-2.0.10.dist-info/METADATA,sha256=fNxFNieKf1HmIeAnSQs6gkJj7a0eo3gdMcwjXmAiqfc,6087
+crhelper-2.0.10.dist-info/NOTICE,sha256=gDru0mjdrGkrCJfnHTVboKMdS7U85Ha8bV_PQTCckfM,96
+crhelper-2.0.10.dist-info/RECORD,,
+crhelper-2.0.10.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+crhelper-2.0.10.dist-info/WHEEL,sha256=g4nMs7d-Xl9-xC9XovUrsDHGXt-FT0E17Yqo92DEfvY,92
+crhelper-2.0.10.dist-info/top_level.txt,sha256=5lsIDg-BZ_w-Z7263X6XUH2OCq60AYeG2IV1S_6EF0w,9
+crhelper/__init__.py,sha256=VSvHU2MKgP96DHSDXR1OYxnbC8j7yfuVhZubBLU7Pns,66
+crhelper/__pycache__/__init__.cpython-39.pyc,,
+crhelper/__pycache__/log_helper.cpython-39.pyc,,
+crhelper/__pycache__/resource_helper.cpython-39.pyc,,
+crhelper/__pycache__/utils.cpython-39.pyc,,
+crhelper/log_helper.py,sha256=18n4WKlGgxXL_iiYPqE8dWv9TW4sPZc4Ae3px5dbHmY,2665
+crhelper/resource_helper.py,sha256=FB588afUwUUvytXToe6ye_RnJAYqHcIaamhEL6Y1fR0,12849
+crhelper/utils.py,sha256=MA07Zz0GjjEMlqmrG7ePfOdPl252GLi9To-DG-wVOuc,2016

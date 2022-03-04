@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  LogRetention:
+    Type: Custom::setLogRetention
+    Properties:
+      ServiceToken: !GetAtt LogRetentionLambda.Arn
+  LogRetentionLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Description: Set Retention date for MWAA log groups
+      Runtime: python3.6
+      Role: !GetAtt  LambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          MWAA_ENV_NAME: "MwaaEnvironment"
+          RETENTION_DAYS: "7"
+      Code:
+        ZipFile: |
+          import os
+          import cfnresponse
+          import boto3
+          client = boto3.client('logs')
+          env_name = os.environ['MWAA_ENV_NAME']
+          retention = os.environ['RETENTION_DAYS']
+          logs = ['DAGProcessing','Scheduler','Task', 'WebServer', 'Worker']
+          responseData = {"Message": "Resource create/update/delete successful!"}
+          def handler(event, context):
+              try:
+                if event["RequestType"] == "Create" or event["RequestType"] == "update":
+                  for log in logs:
+                      response = client.put_retention_policy(
+                          logGroupName=f'airflow-{env_name}-{log}',
+                          retentionInDays=int(retention)
+                      ) 
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+              except Exception as e:
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+             - "sts:AssumeRole"
+      Path: "/service-role/"
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: Cloudwatch
+                Effect: Allow
+                Action:
+                  - Cloudwatch:PutRetentionPolicy
+                Resource: "*"
+              - Sid: Cloudwatchlog
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
