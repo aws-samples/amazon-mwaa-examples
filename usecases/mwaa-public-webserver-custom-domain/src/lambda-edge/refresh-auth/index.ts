@@ -1,0 +1,182 @@
+// Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: MIT-0
+
+import {
+  parse as parseQueryString,
+  stringify as stringifyQueryString,
+} from "querystring";
+import { CloudFrontRequestHandler } from "aws-lambda";
+import {
+  getCompleteConfig,
+  extractAndParseCookies,
+  generateCookieHeaders,
+  httpPostToCognitoWithRetry,
+  createErrorHtml,
+  sign,
+  timestampInSeconds,
+  RequiresConfirmationError,
+} from "../shared/shared";
+
+const CONFIG = getCompleteConfig();
+CONFIG.logger.debug("Configuration loaded:", CONFIG);
+
+export const handler: CloudFrontRequestHandler = async (event) => {
+  CONFIG.logger.debug("Event:", event);
+  const request = event.Records[0].cf.request;
+  const domainName = request.headers["host"][0].value;
+  let redirectedFromUri = `https://${domainName}`;
+
+  try {
+    const { requestedUri, nonce: currentNonce } = parseQueryString(
+      request.querystring
+    );
+    redirectedFromUri += requestedUri || "";
+    const {
+      idToken,
+      accessToken,
+      refreshToken,
+      nonce: originalNonce,
+      nonceHmac,
+    } = extractAndParseCookies(
+      request.headers,
+      CONFIG.clientId
+    );
+
+    validateRefreshRequest(
+      currentNonce,
+      nonceHmac,
+      originalNonce,
+      idToken,
+      accessToken,
+      refreshToken
+    );
+
+    let headers: { "Content-Type": string; Authorization?: string } = {
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
+
+    if (CONFIG.clientSecret) {
+      const encodedSecret = Buffer.from(
+        `${CONFIG.clientId}:${CONFIG.clientSecret}`
+      ).toString("base64");
+      headers["Authorization"] = `Basic ${encodedSecret}`;
+    }
+
+    let tokens = {
+      id_token: idToken!,
+      access_token: accessToken!,
+      refresh_token: refreshToken!,
+    };
+    let cookieHeadersEventType: keyof typeof generateCookieHeaders;
+    try {
+      const body = stringifyQueryString({
+        grant_type: "refresh_token",
+        client_id: CONFIG.clientId,
+        refresh_token: refreshToken,
+      });
+      const res = await httpPostToCognitoWithRetry(
+        `https://${CONFIG.cognitoAuthDomain}/oauth2/token`,
+        Buffer.from(body),
+        { headers },
+        CONFIG.logger
+      ).catch((err) => {
+        throw new Error(`Failed to refresh tokens: ${err}`);
+      });
+      tokens.id_token = res.data.id_token;
+      tokens.access_token = res.data.access_token;
+      cookieHeadersEventType = "newTokens";
+    } catch (err) {
+      cookieHeadersEventType = "refreshFailed";
+    }
+    const response = {
+      status: "307",
+      statusDescription: "Temporary Redirect",
+      headers: {
+        location: [
+          {
+            key: "location",
+            value: redirectedFromUri,
+          },
+        ],
+        "set-cookie": generateCookieHeaders[cookieHeadersEventType]({
+          tokens,
+          domainName,
+          ...CONFIG,
+        }),
+        ...CONFIG.cloudFrontHeaders,
+      },
+    };
+    CONFIG.logger.debug("Returning response:\n", response);
+    return response;
+  } catch (err) {
+    const response = {
+      body: createErrorHtml({
+        title: "Refresh issue",
+        message: "We can't refresh your sign-in because of a",
+        expandText: "technical problem",
+        details: `${err}`,
+        linkUri: redirectedFromUri,
+        linkText: "Try again",
+      }),
+      status: "200",
+      headers: {
+        ...CONFIG.cloudFrontHeaders,
+        "content-type": [
+          {
+            key: "Content-Type",
+            value: "text/html; charset=UTF-8",
+          },
+        ],
+      },
+    };
+    CONFIG.logger.debug("Returning response:\n", response);
+    return response;
+  }
+};
+
+function validateRefreshRequest(
+  currentNonce?: string | string[],
+  nonceHmac?: string,
+  originalNonce?: string,
+  idToken?: string,
+  accessToken?: string,
+  refreshToken?: string
+) {
+  if (!originalNonce) {
+    throw new Error(
+      "Your browser didn't send the nonce cookie along, but it is required for security (prevent CSRF)."
+    );
+  } else if (currentNonce !== originalNonce) {
+    throw new Error("Nonce mismatch");
+  }
+  Object.entries({ idToken, accessToken, refreshToken }).forEach(
+    ([tokenType, token]) => {
+      if (!token) {
+        throw new Error(`Missing ${tokenType}`);
+      }
+    }
+  );
+  // Nonce should not be too old
+  const nonceTimestamp = parseInt(
+    currentNonce.slice(0, currentNonce.indexOf("T"))
+  );
+  if (timestampInSeconds() - nonceTimestamp > CONFIG.nonceMaxAge) {
+    throw new RequiresConfirmationError(
+      `Nonce is too old (nonce is from ${new Date(
+        nonceTimestamp * 1000
+      ).toISOString()})`
+    );
+  }
+
+  // Nonce should have the right signature: proving we were the ones generating it (and e.g. not malicious JS on a subdomain)
+  const calculatedHmac = sign(
+    currentNonce,
+    CONFIG.nonceSigningSecret,
+    CONFIG.nonceLength
+  );
+  if (calculatedHmac !== nonceHmac) {
+    throw new RequiresConfirmationError(
+      `Nonce signature mismatch! Expected ${calculatedHmac} but got ${nonceHmac}`
+    );
+  }
+}

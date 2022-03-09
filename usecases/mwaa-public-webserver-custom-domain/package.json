@@ -1,0 +1,44 @@
+{
+  "name": "cloudfront-authorization-at-edge",
+  "version": "2.0.18",
+  "description": "Protect downloads of your content hosted on CloudFront with Cognito authentication using Lambda@Edge",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Sorry, there aren't any tests\"; exit 1",
+    "tsc": "npx tsc -b",
+    "webpack": "webpack --progress",
+    "analyze": "webpack --profile --json > stats.json && webpack-bundle-analyzer ./stats.json",
+    "build": "npm run tsc && npm run webpack",
+    "update-dependencies": "for DIR in . $(ls -d src/cfn-custom-resources/*) $(ls -d src/lambda-edge/*) src/cfn-custom-resources/react-app/react-app/; do [ ! -f ${DIR}/package.json ] || (cd ${DIR} && echo \"Updating ${DIR} ...\" && rm -rf node_modules package-lock.json && npm update --dev); done; npm install --prune",
+    "postinstall": "for DIR in $(ls -d src/cfn-custom-resources/*) $(ls -d src/lambda-edge/*); do [ ! -f ${DIR}/package.json ] || (cd ${DIR} && echo \"Updating ${DIR} ...\" && npm install --prune --ignore-scripts); done",
+    "audit-fix": "for DIR in . $(ls -d src/cfn-custom-resources/*) $(ls -d src/lambda-edge/*) src/cfn-custom-resources/react-app/react-app/; do [ ! -f ${DIR}/package.json ] || (cd ${DIR} && echo \"Updating ${DIR} ...\" && npm audit fix); done"
+  },
+  "keywords": [],
+  "author": "",
+  "devDependencies": {
+    "@types/adm-zip": "^0.4.34",
+    "@types/aws-lambda": "^8.10.77",
+    "@types/cookie": "^0.4.0",
+    "@types/fs-extra": "^9.0.11",
+    "@types/node": "^15.12.5",
+    "aws-sdk": "^2.935.0",
+    "html-loader": "^2.1.2",
+    "prettier": "^2.3.2",
+    "terser-webpack-plugin": "^5.1.4",
+    "ts-loader": "^9.2.3",
+    "typescript": "^4.3.4",
+    "webpack": "^5.40.0",
+    "webpack-bundle-analyzer": "^4.4.2",
+    "webpack-cli": "^4.7.2"
+  },
+  "dependencies": {
+    "@aws-sdk/client-mwaa": "^3.49.0",
+    "adm-zip": "^0.5.5",
+    "aws-jwt-verify": "^1.0.2",
+    "cookie": "^0.4.1"
+  },
+  "prettier": {
+    "trailingComma": "es5",
+    "tabWidth": 2
+  }
+}

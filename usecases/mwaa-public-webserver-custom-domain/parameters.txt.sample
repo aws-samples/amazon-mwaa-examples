@@ -1,0 +1,7 @@
+EmailAddress=<email address for cognito user>
+AlternateDomainNames=<your custom domain name>
+CloudFrontAccessLogsBucket=<logs bucket>.s3.amazonaws.com
+MwaaEnvironmentName=<Airflow environment name>
+MwaaPublicEndpoint=<Public MWAA domain without https://>
+ACMCertificateArn=<ACM Certificate arn for custom domain, this must be in us-east-1>
+Version=1.0 <only change if you make changes to Lambda@edge functions post initial deployment>

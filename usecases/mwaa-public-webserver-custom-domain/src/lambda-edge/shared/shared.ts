@@ -1,0 +1,569 @@
+// Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: MIT-0
+
+import { CloudFrontHeaders } from "aws-lambda";
+import { readFileSync } from "fs";
+import { formatWithOptions } from "util";
+import { createHmac } from "crypto";
+import { parse } from "cookie";
+import { fetch } from "./https";
+import { Agent, RequestOptions } from "https";
+import html from "./error-page/template.html";
+import { CognitoJwtVerifier } from "aws-jwt-verify";
+
+export interface CookieSettings {
+  idToken: string;
+  accessToken: string;
+  refreshToken: string;
+  nonce: string;
+  [key: string]: string;
+}
+
+function getDefaultCookieSettings(): CookieSettings {
+  // Defaults can be overridden by the user (CloudFormation Stack parameter) but should be solid enough for most purposes
+  return {
+    idToken: "Path=/; Secure; SameSite=Lax",
+    accessToken: "Path=/; Secure; SameSite=Lax",
+    refreshToken: "Path=/; Secure; SameSite=Lax",
+    nonce: "Path=/; Secure; HttpOnly; SameSite=Lax",
+  };
+}
+
+export interface HttpHeaders {
+  [key: string]: string;
+}
+
+interface ConfigFromDisk {
+  logLevel: keyof typeof LogLevel;
+}
+
+interface ConfigFromDiskWithHeaders extends ConfigFromDisk {
+  httpHeaders: HttpHeaders;
+}
+
+interface ConfigFromDiskComplete extends ConfigFromDiskWithHeaders {
+  userPoolArn: string;
+  clientId: string;
+  oauthScopes: string[];
+  cognitoAuthDomain: string;
+  redirectPathSignIn: string;
+  redirectPathSignOut: string;
+  redirectPathAuthRefresh: string;
+  cookieSettings: CookieSettings;
+  clientSecret: string;
+  nonceSigningSecret: string;
+  additionalCookies: { [name: string]: string };
+  requiredGroup: string;
+  mwaaEnvironmentName: string;
+  mwaaPublicEndpoint: string;
+  secretAllowedCharacters?: string;
+  pkceLength?: number;
+  nonceLength?: number;
+  nonceMaxAge?: number;
+}
+
+function isConfigWithHeaders(config: any): config is ConfigFromDiskComplete {
+  return config["httpHeaders"] !== undefined;
+}
+
+function isCompleteConfig(config: any): config is ConfigFromDiskComplete {
+  return config["userPoolArn"] !== undefined;
+}
+
+enum LogLevel {
+  "none" = 0,
+  "error" = 10,
+  "warn" = 20,
+  "info" = 30,
+  "debug" = 40,
+}
+
+class Logger {
+  constructor(private logLevel: LogLevel) {}
+
+  private format(args: unknown[], depth = 10) {
+    return args.map((arg) => formatWithOptions({ depth }, arg)).join(" ");
+  }
+
+  public info(...args: unknown[]) {
+    if (this.logLevel >= LogLevel.info) {
+      console.log(this.format(args));
+    }
+  }
+  public warn(...args: unknown[]) {
+    if (this.logLevel >= LogLevel.warn) {
+      console.warn(this.format(args));
+    }
+  }
+  public error(...args: unknown[]) {
+    if (this.logLevel >= LogLevel.error) {
+      console.error(this.format(args));
+    }
+  }
+  public debug(...args: unknown[]) {
+    if (this.logLevel >= LogLevel.debug) {
+      console.trace(this.format(args));
+    }
+  }
+}
+
+export interface Config extends ConfigFromDisk {
+  logger: Logger;
+}
+
+export interface ConfigWithHeaders extends Config, ConfigFromDiskWithHeaders {
+  cloudFrontHeaders: CloudFrontHeaders;
+}
+
+export interface CompleteConfig
+  extends ConfigWithHeaders,
+    ConfigFromDiskComplete {
+  [x: string]: any;
+  cloudFrontHeaders: CloudFrontHeaders;
+  secretAllowedCharacters: string;
+  pkceLength: number;
+  nonceLength: number;
+  nonceMaxAge: number;
+}
+
+export function getConfig(): Config {
+  const config = JSON.parse(
+    readFileSync(`${__dirname}/configuration.json`).toString("utf8")
+  ) as ConfigFromDisk;
+  return {
+    logger: new Logger(LogLevel[config.logLevel]),
+    ...config,
+  };
+}
+
+export function getConfigWithHeaders(): ConfigWithHeaders {
+  const config = getConfig();
+
+  if (!isConfigWithHeaders(config)) {
+    throw new Error("Incomplete config in configuration.json");
+  }
+
+  return {
+    cloudFrontHeaders: asCloudFrontHeaders(config.httpHeaders),
+    ...config,
+  };
+}
+
+export function getCompleteConfig(): CompleteConfig {
+  const config = getConfigWithHeaders();
+
+  if (!isCompleteConfig(config)) {
+    throw new Error("Incomplete config in configuration.json");
+  }
+
+  // Derive cookie settings by merging the defaults with the explicitly provided values
+  const defaultCookieSettings = getDefaultCookieSettings();
+  const cookieSettings = config.cookieSettings
+    ? (Object.fromEntries(
+        Object.entries({
+          ...defaultCookieSettings,
+          ...config.cookieSettings,
+        }).map(([k, v]) => [
+          k,
+          v || defaultCookieSettings[k as keyof CookieSettings],
+        ])
+      ) as CookieSettings)
+    : defaultCookieSettings;
+
+  // Defaults for nonce and PKCE
+  const defaults = {
+    secretAllowedCharacters:
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~",
+    pkceLength: 43, // Should be between 43 and 128 - per spec
+    nonceLength: 16,
+    nonceMaxAge:
+      (cookieSettings?.nonce &&
+        parseInt(parse(cookieSettings.nonce.toLowerCase())["max-age"])) ||
+      60 * 60 * 24,
+  };
+
+  return {
+    ...defaults,
+    ...config,
+    cookieSettings,
+  };
+}
+
+export function getConfigWithJwtVerifier() {
+  const config = getCompleteConfig();
+  const userPoolId = config.userPoolArn.split("/")[1];
+  return {
+    ...config,
+    jwtVerifier: CognitoJwtVerifier.create({
+      userPoolId,
+      clientId: config.clientId,
+      tokenUse: "id",
+      groups: config.requiredGroup || undefined,
+      mwaaEnvironmentName: config.mwaaEnvironmentName,
+    }),
+  };
+}
+
+type Cookies = { [key: string]: string };
+
+function extractCookiesFromHeaders(headers: CloudFrontHeaders) {
+  // Cookies are present in the HTTP header "Cookie" that may be present multiple times.
+  // This utility function parses occurrences  of that header and splits out all the cookies and their values
+  // A simple object is returned that allows easy access by cookie name: e.g. cookies["nonce"]
+  if (!headers["cookie"]) {
+    return {};
+  }
+  const cookies = headers["cookie"].reduce(
+    (reduced, header) => Object.assign(reduced, parse(header.value)),
+    {} as Cookies
+  );
+
+  return cookies;
+}
+
+function withCookieDomain(
+  distributionDomainName: string,
+  cookieSettings: string
+) {
+  // Add the domain to the cookiesetting
+  if (cookieSettings.toLowerCase().indexOf("domain") === -1) {
+    // Add leading dot for compatibility with Amplify (or js-cookie really)
+    return `${cookieSettings}; Domain=.${distributionDomainName}`;
+  }
+  return cookieSettings;
+}
+
+export function asCloudFrontHeaders(headers: HttpHeaders): CloudFrontHeaders {
+  if (!headers) return {};
+  // Turn a regular key-value object into the explicit format expected by CloudFront
+  return Object.entries(headers).reduce(
+    (reduced, [key, value]) =>
+      Object.assign(reduced, {
+        [key.toLowerCase()]: [
+          {
+            key,
+            value,
+          },
+        ],
+      }),
+    {} as CloudFrontHeaders
+  );
+}
+
+export function getAmplifyCookieNames(
+  clientId: string,
+  cookiesOrUserName: Cookies | string
+) {
+  const keyPrefix = `CognitoIdentityServiceProvider.${clientId}`;
+  const lastUserKey = `${keyPrefix}.LastAuthUser`;
+  let tokenUserName: string;
+  if (typeof cookiesOrUserName === "string") {
+    tokenUserName = cookiesOrUserName;
+  } else {
+    tokenUserName = cookiesOrUserName[lastUserKey];
+  }
+  return {
+    lastUserKey,
+    userDataKey: `${keyPrefix}.${tokenUserName}.userData`,
+    scopeKey: `${keyPrefix}.${tokenUserName}.tokenScopesString`,
+    idTokenKey: `${keyPrefix}.${tokenUserName}.idToken`,
+    accessTokenKey: `${keyPrefix}.${tokenUserName}.accessToken`,
+    refreshTokenKey: `${keyPrefix}.${tokenUserName}.refreshToken`,
+  };
+}
+
+export function getElasticsearchCookieNames() {
+  return {
+    idTokenKey: "ID-TOKEN",
+    accessTokenKey: "ACCESS-TOKEN",
+    refreshTokenKey: "REFRESH-TOKEN",
+    cognitoEnabledKey: "COGNITO-ENABLED",
+  };
+}
+
+export function extractAndParseCookies(
+  headers: CloudFrontHeaders,
+  clientId: string
+) {
+  const cookies = extractCookiesFromHeaders(headers);
+  if (!cookies) {
+    return {};
+  }
+
+  let cookieNames: { [name: string]: string };
+  cookieNames = getAmplifyCookieNames(clientId, cookies);
+
+  return {
+    tokenUserName: cookies[cookieNames.lastUserKey],
+    idToken: cookies[cookieNames.idTokenKey],
+    accessToken: cookies[cookieNames.accessTokenKey],
+    refreshToken: cookies[cookieNames.refreshTokenKey],
+    scopes: cookies[cookieNames.scopeKey],
+    nonce: cookies["auth-edge-nonce"],
+    nonceHmac: cookies["auth-edge-nonce-hmac"],
+    pkce: cookies["auth-edge-pkce"],
+  };
+}
+
+interface GenerateCookieHeadersParam {
+  clientId: string;
+  oauthScopes: string[];
+  domainName: string;
+  cookieSettings: CookieSettings;
+  additionalCookies: { [name: string]: string };
+  tokens: {
+    id_token: string;
+    access_token: string;
+    refresh_token: string;
+  };
+}
+
+export const generateCookieHeaders = {
+  newTokens: (param: GenerateCookieHeadersParam) =>
+    _generateCookieHeaders({ ...param, event: "newTokens" }),
+  signOut: (param: GenerateCookieHeadersParam) =>
+    _generateCookieHeaders({ ...param, event: "signOut" }),
+  refreshFailed: (param: GenerateCookieHeadersParam) =>
+    _generateCookieHeaders({ ...param, event: "refreshFailed" }),
+};
+
+function _generateCookieHeaders(
+  param: GenerateCookieHeadersParam & {
+    event: "newTokens" | "signOut" | "refreshFailed";
+  }
+) {
+  /*
+    Generate cookie headers for the following scenario's:
+      - new tokens: called from Parse Auth and Refresh Auth lambda, when receiving fresh JWT's from Cognito
+      - sign out: called from Sign Out Lambda, when the user visits the sign out URL
+      - refresh failed: called from Refresh Auth lambda when the refresh failed (e.g. because the refresh token has expired)
+
+    Note that there are other places besides this helper function where cookies can be set (search codebase for "set-cookie")
+    */
+
+  const decodedIdToken = decodeToken(param.tokens.id_token);
+  const tokenUserName = decodedIdToken["cognito:username"];
+
+  let cookies: Cookies;
+  let cookieNames: { [name: string]: string };
+  cookieNames = getAmplifyCookieNames(param.clientId, tokenUserName);
+  const userData = JSON.stringify({
+    UserAttributes: [
+      {
+        Name: "sub",
+        Value: decodedIdToken["sub"],
+      },
+      {
+        Name: "email",
+        Value: decodedIdToken["email"],
+      },
+    ],
+    Username: tokenUserName,
+  });
+
+  // Construct object with the cookies
+  cookies = {
+    [cookieNames.lastUserKey]: `${tokenUserName}; ${withCookieDomain(
+      param.domainName,
+      param.cookieSettings.idToken
+    )}`,
+    [cookieNames.scopeKey]: `${param.oauthScopes.join(
+      " "
+    )}; ${withCookieDomain(
+      param.domainName,
+      param.cookieSettings.accessToken
+    )}`,
+    [cookieNames.userDataKey]: `${encodeURIComponent(
+      userData
+    )}; ${withCookieDomain(param.domainName, param.cookieSettings.idToken)}`,
+    "amplify-signin-with-hostedUI": `true; ${withCookieDomain(
+      param.domainName,
+      param.cookieSettings.accessToken
+    )}`,
+  };
+  Object.assign(cookies, {
+    [cookieNames.idTokenKey]: `${param.tokens.id_token}; ${withCookieDomain(
+      param.domainName,
+      param.cookieSettings.idToken
+    )}`,
+    [cookieNames.accessTokenKey]: `${
+      param.tokens.access_token
+    }; ${withCookieDomain(param.domainName, param.cookieSettings.accessToken)}`,
+    [cookieNames.refreshTokenKey]: `${
+      param.tokens.refresh_token
+    }; ${withCookieDomain(
+      param.domainName,
+      param.cookieSettings.refreshToken
+    )}`,
+  });
+
+  if (param.event === "signOut") {
+    // Expire all cookies
+    Object.keys(cookies).forEach(
+      (key) => (cookies[key] = expireCookie(cookies[key]))
+    );
+  } else if (param.event === "refreshFailed") {
+    // Expire refresh token (so the browser will not send it in vain again)
+    cookies[cookieNames.refreshTokenKey] = expireCookie(
+      cookies[cookieNames.refreshTokenKey]
+    );
+  }
+
+  // Always expire nonce, nonceHmac and pkce - this is valid in all scenario's:
+  // * event === 'newTokens' --> you just signed in and used your nonce and pkce successfully, don't need them no more
+  // * event === 'refreshFailed' --> you are signed in already, why do you still have a nonce?
+  // * event === 'signOut' --> clear ALL cookies anyway
+  [
+    "auth-edge-nonce",
+    "auth-edge-nonce-hmac",
+    "auth-edge-pkce",
+  ].forEach((key) => {
+    cookies[key] = expireCookie();
+  });
+
+  // Return cookie object in format of CloudFront headers
+  return Object.entries({
+    ...param.additionalCookies,
+    ...cookies,
+  }).map(([k, v]) => ({ key: "set-cookie", value: `${k}=${v}` }));
+}
+
+function expireCookie(cookie: string = "") {
+  const cookieParts = cookie
+    .split(";")
+    .map((part) => part.trim())
+    .filter((part) => !part.toLowerCase().startsWith("max-age"))
+    .filter((part) => !part.toLowerCase().startsWith("expires"));
+  const expires = `Expires=${new Date(0).toUTCString()}`;
+  const [, ...settings] = cookieParts; // first part is the cookie value, which we'll clear
+  return ["", ...settings, expires].join("; ");
+}
+
+export function decodeToken(jwt: string) {
+  const tokenBody = jwt.split(".")[1];
+  const decodableTokenBody = tokenBody.replace(/-/g, "+").replace(/_/g, "/");
+  return JSON.parse(Buffer.from(decodableTokenBody, "base64").toString());
+}
+
+const AGENT = new Agent({ keepAlive: true });
+
+export async function httpPostToCognitoWithRetry(
+  url: string,
+  data: Buffer,
+  options: RequestOptions,
+  logger: Logger
+) {
+  let attempts = 0;
+  while (true) {
+    ++attempts;
+    try {
+      return await fetch(url, data, {
+        agent: AGENT,
+        ...options,
+        method: "POST",
+      }).then((res) => {
+        if (res.status !== 200) {
+          throw new Error(`Status is ${res.status}, expected 200`);
+        }
+        if (!res.headers["content-type"]?.startsWith("application/json")) {
+          throw new Error(
+            `Content-Type is ${res.headers["content-type"]}, expected application/json`
+          );
+        }
+        return {
+          ...res,
+          data: JSON.parse(res.data.toString()),
+        };
+      });
+    } catch (err) {
+      logger.debug(`HTTP POST to ${url} failed (attempt ${attempts}):`);
+      logger.debug(err);
+      if (attempts >= 5) {
+        // Try 5 times at most
+        logger.error(
+          `No success after ${attempts} attempts, seizing further attempts`
+        );
+        throw err;
+      }
+      if (attempts >= 2) {
+        // After attempting twice immediately, do some exponential backoff with jitter
+        logger.debug(
+          "Doing exponential backoff with jitter, before attempting HTTP POST again ..."
+        );
+        await new Promise((resolve) =>
+          setTimeout(
+            resolve,
+            25 * (Math.pow(2, attempts) + Math.random() * attempts)
+          )
+        );
+        logger.debug("Done waiting, will try HTTP POST again now");
+      }
+    }
+  }
+}
+
+export function createErrorHtml(props: {
+  title: string;
+  message: string;
+  expandText?: string;
+  details?: string;
+  linkUri: string;
+  linkText: string;
+}) {
+  const params = { ...props, region: process.env.AWS_REGION };
+  return html.replace(
+    /\${([^}]*)}/g,
+    (_: any, v: keyof typeof params) => escapeHtml(params[v]) ?? ""
+  );
+}
+
+function escapeHtml(unsafe: unknown) {
+  if (typeof unsafe !== "string") {
+    return undefined;
+  }
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+export const urlSafe = {
+  /*
+        Functions to translate base64-encoded strings, so they can be used:
+        - in URL's without needing additional encoding
+        - in OAuth2 PKCE verifier
+        - in cookies (to be on the safe side, as = + / are in fact valid characters in cookies)
+
+        stringify:
+            use this on a base64-encoded string to translate = + / into replacement characters
+
+        parse:
+            use this on a string that was previously urlSafe.stringify'ed to return it to
+            its prior pure-base64 form. Note that trailing = are not added, but NodeJS does not care
+    */
+  stringify: (b64encodedString: string) =>
+    b64encodedString.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_"),
+  parse: (b64encodedString: string) =>
+    b64encodedString.replace(/-/g, "+").replace(/_/g, "/"),
+};
+
+export function sign(
+  stringToSign: string,
+  secret: string,
+  signatureLength: number
+) {
+  const digest = createHmac("sha256", secret)
+    .update(stringToSign)
+    .digest("base64")
+    .slice(0, signatureLength);
+  const signature = urlSafe.stringify(digest);
+  return signature;
+}
+
+export function timestampInSeconds() {
+  return (Date.now() / 1000) | 0;
+}
+
+export class RequiresConfirmationError extends Error {}
