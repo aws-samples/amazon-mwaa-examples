@@ -7,7 +7,7 @@ https://medium.com/apache-airflow/magic-loop-in-airflow-reloaded-3e1bd8fb6671
 
 ### Versions Supported
 
-Apache Airflow 2.2.2 on Amazon MWAA, other 2.x versions and platforms may also work but are untested.
+Apache Airflow 2.2.2, tested on Amazon MWAA.  Other 2.x versions and platforms may also work but are untested.
 
 ### Setup 
 
