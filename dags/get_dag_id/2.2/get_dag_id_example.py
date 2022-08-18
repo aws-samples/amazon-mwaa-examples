@@ -101,7 +101,7 @@ for row_num in range(1,NUM_ROWS+1):
             start_date=datetime(2022, 1, 1),
             catchup=False,
         )
-        def update_table_dag(sql=""):
+        def update_table_dag():
             #if part of a task execution retrieve the SQL statement
             if(current_dag):
                 sqlstring=get_query(row_num)        
