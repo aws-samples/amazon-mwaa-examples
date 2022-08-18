@@ -11,7 +11,7 @@ Apache Airflow 2.2.2, tested on Amazon MWAA.  Other 2.x versions and platforms m
 
 ### Setup 
 
-This function, when referenced from an Airflow DAG, will return NULL if not part of a 
+The function `GetCurrentDag()`, when referenced from an Airflow DAG, will return NULL if not part of a 
 Celery Task execution, or will return the DAG ID string if it is.
 
 The file `get_dag_id_example.py` creates N dags, one per table row, but will only retrieve SQL statement for 
