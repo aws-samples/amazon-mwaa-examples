@@ -6,7 +6,7 @@ The DAG file and scripts in this project define how we can use a correlation_id 
 
 ## Architecture 
 
-<insert_image>
+![Correlation ID across DAG run](./images/mwaa_observability.png)
 
 ## Deploy
 Execute the ['MWAA analytics workshop'](https://catalog.us-east-1.prod.workshops.aws/workshops/795e88bb-17e2-498f-82d1-2104f4824168/en-US) and then use the scripts present in the github repo to gain more observability of your DAG run
