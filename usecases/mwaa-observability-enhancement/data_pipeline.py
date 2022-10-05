@@ -1,3 +1,12 @@
+# DAG python file to execute workflow
+#1. Wait for source data to be present in S3 bucket
+#2. Run a glue crawler task to create the table metadata in the data catalog from the source data
+#3. Run a glue job tasl to transform the source data into a processed data format while performing file format conversions
+#4. Create a EMR cluster
+#5. Run a EMR job to generate reporting data sets
+#6. Terminate the EMR cluster
+
+
 from datetime import timedelta
 from distutils.command.config import config  
 import airflow  
