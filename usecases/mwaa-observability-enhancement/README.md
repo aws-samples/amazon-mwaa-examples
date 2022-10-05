@@ -8,8 +8,11 @@ The DAG file and scripts in this project define how we can use a correlation_id 
 
 ![Correlation ID across DAG run](./images/mwaa_observability.png)
 
-## Deploy
+## Prerequistes for Deployment
 Execute the ['MWAA analytics workshop'](https://catalog.us-east-1.prod.workshops.aws/workshops/795e88bb-17e2-498f-82d1-2104f4824168/en-US) and then use the scripts present in the github repo to gain more observability of your DAG run
+
+- Place the DAG file 'data_pieplie.py' in the S3 bucket 'dags' folder 
+- Place the script files in the S3 bucket 'scripts' folder
 
 ---
 
