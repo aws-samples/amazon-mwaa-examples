@@ -12,3 +12,8 @@ venv/
 # IDE
 .idea/
 .vscode/
+.terraform
+.terraform.**
+terraform.*
+terraform.output
+.DS_Store
