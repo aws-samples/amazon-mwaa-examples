@@ -1,0 +1,13 @@
+VERSION = 'v1'
+DAGS_S3_LOCATION = f'mwaa-s3-bucket-placeholder-{VERSION}'
+MWAA_ENV = f'poc-{VERSION}'
+AIRFLOW_VERSION = '2.2.2'
+CIDR = '10.129.0.0/22'
+CIDR_MASK = 24
+MAZ_AZS = 2
+ID = f'mwaa-blueprint-{VERSION}'
+REQUIREMENTS_FILE = 'requirements.txt'
+PLUGINS_FILE = 'plugins/eks_airflow.zip'
+CLUSTER_NAME = f'{ID}-eks-{VERSION}'
+NODEGROUP_SUFFIX = '-nodegroup'
+NODEGROUP_NAME = f'{CLUSTER_NAME}{NODEGROUP_SUFFIX}-{VERSION}'
