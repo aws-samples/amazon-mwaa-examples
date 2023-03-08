@@ -93,7 +93,6 @@ resource "aws_ecs_service" "ecsService" {
   ]
 }
 
-Public subnets are subnets that have an internet gateway (e.g. igw-123345) in their route table.
 resource "aws_lb" "loadbalancer" {
   name               = "mwaa-local-runner-alb"
   internal           = false # will create an internet-facing load balancer by default. Change this to true if internal ALB is required.
