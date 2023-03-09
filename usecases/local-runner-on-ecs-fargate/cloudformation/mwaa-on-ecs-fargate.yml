@@ -1,0 +1,248 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description:  This template deploys local-runner on ECS Fargate cluster on a VPC which hosts MWAA Environment and Serverless Aurora PostgreSQL database. Please select 
+ ensure the same VPC, Private/Public Subnets, and Security Group(s) from main your MWAA environment. 
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: The VPC ID. Specify the VPC ID being used with the MWAA environment.
+    Default: mwaa-vpc-id-123456789
+  ContainerCpu:
+    Type: Number
+    Default: 256
+    Description: How much CPU to give the container. 1024 is 1 CPU
+  ContainerMemory:
+    Type: Number
+    Default: 512
+    Description: How much memory in megabytes to give the container
+  ContainerPort:
+    Type: Number
+    Default: 8080
+    Description: What port number the application inside the docker container is binding to
+  ServiceName: 
+    Type: String
+    Default: mwaa-local-runner
+  ECRImageURI:
+    Type: String
+    Description: The task execution role ARN. If making use of the same role being used for the existing MWAA environment, make sure it has permissions to access ECR and CloudWatch.
+    Default: "123456789.dkr.ecr.us-east-1.amazonaws.com/mwaa-local-runner:tag"
+  SecurityGroups:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Default: 'mwaa-sg-id-123456789'
+    Description: A list of security groups. This security group must allow itself in its rules. Specify the security group being used with the existing MWAA environment e.g. ['sg-12345']
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: A list of private subnets. Specify the private subnets being used with the existing MWAA environment e.g. ['subnet-12345', 'subnet-12345']
+    Default: 'mwaa-pvt-subnet-id-1,mwaa-pvt-subnet-id-2'
+  PublicSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: A list of public subnets. Specify the private subnets being used with the existing MWAA environment e.g. ['subnet-12345', 'subnet-12345']
+    Default: 'mwaa-public-subnet-id-1,mwaa-public-subnet-id-2'
+  DBMasterUsername:
+    Type: String
+    Default: postgres
+  DBMasterUserPassword:
+    Type: String
+    NoEcho: true
+    Default: Test12345
+  DBClusterIdentifier:
+    Type: String
+    Default: database-mwaa-local-runner
+  DBMinCapacity:
+    Type: String
+    Default: 0.5
+  DBMaxCapacity:
+    Type: String
+    Default: 1
+  DBPort:
+    Type: String
+    Default: 5432
+  DatabaseName:
+    Type: String
+    Default: AirflowMetadata
+  S3BucketURI:
+    Type: String
+    Default: s3://your-mwaa-environment-s3-bucket-path
+  ECSTaskExecutionRoleArn:
+    Type: String
+    Default: arn:aws:iam::0123456789:role/service-role/execution-role-name
+  AssignPublicIpToTask:
+    Type: String
+    Description: If using public subnets for MWAA environment, specify as true. Else, specify as false
+    Default: "yes"
+    AllowedValues: ["yes","no"]
+Conditions:
+  IsPublicLoadBalancer: !Equals
+    - !Ref AssignPublicIpToTask
+    - "yes"
+Resources:
+  DBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: !Ref 'AWS::StackName'
+      SubnetIds: !Ref PrivateSubnetIds
+  RDSDBCluster:
+    Type: 'AWS::RDS::DBCluster'
+    DeletionPolicy: Delete
+    Properties:
+      Engine: aurora-postgresql
+      DatabaseName: !Ref DatabaseName
+      DBClusterIdentifier: !Ref DBClusterIdentifier
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      MasterUsername: !Ref DBMasterUsername
+      MasterUserPassword: !Ref DBMasterUserPassword
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: !Ref DBMinCapacity
+        MaxCapacity: !Ref DBMaxCapacity
+      VpcSecurityGroupIds: !Ref SecurityGroups
+      Port: !Ref DBPort
+  RDSDBInstance:
+      Type: 'AWS::RDS::DBInstance'
+      Properties:
+        Engine: aurora-postgresql
+        DBInstanceClass: db.serverless
+        DBClusterIdentifier: !Ref RDSDBCluster
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      TargetType: ip
+      Name:  !Ref ServiceName
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref VpcId
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: !If [IsPublicLoadBalancer, 'internet-facing','internal']
+      LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '30'
+      SecurityGroups: !Ref SecurityGroups
+      Subnets: !If [IsPublicLoadBalancer, !Ref PublicSubnetIds, !Ref PrivateSubnetIds]
+      Type: application
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: 'forward'
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 8080
+      Protocol: HTTP
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: mwaa-local-runner-cluster
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Ref AWS::StackName
+      RetentionInDays: 30
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref ServiceName
+      Cpu: 1024
+      Memory: 2048
+      NetworkMode: awsvpc
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      ExecutionRoleArn: !Ref ECSTaskExecutionRoleArn
+      TaskRoleArn: !Ref ECSTaskExecutionRoleArn
+      ContainerDefinitions:
+        - Name:  !Ref ServiceName
+          Image: !Ref ECRImageURI
+          EntryPoint:
+            - "/entrypoint.sh"
+          Command:
+            - "local-runner"
+          WorkingDirectory: /usr/local/airflow
+          PortMappings:
+            - Protocol: tcp
+              ContainerPort: !Ref ContainerPort
+              HostPort: 8080
+          Cpu: !Ref ContainerCpu
+          Memory: !Ref ContainerMemory
+          LinuxParameters:
+            InitProcessEnabled: true
+          Environment:
+            - Name: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+              Value: !Sub
+                - 'postgresql+psycopg2://${dbusername}:${dbpassword}@${clusterEndpoint}:${port}/${databasename}'
+                - dbusername: !Ref DBMasterUsername
+                  dbpassword: !Ref DBMasterUserPassword
+                  clusterEndpoint: !GetAtt 'RDSDBCluster.Endpoint.Address'
+                  port: !GetAtt 'RDSDBCluster.Endpoint.Port'
+                  databasename: !Ref DatabaseName
+            - Name: AIRFLOW__WEBSERVER__COOKIE_SECURE
+              Value: 'False'
+            - Name: DEFAULT_PASSWORD
+              Value: !Ref DBMasterUserPassword
+            - Name: EXECUTOR
+              Value: Local
+            - Name: S3_DAGS_PATH
+              Value: !Sub
+                - '${s3bucket}/dags'
+                - s3bucket: !Ref S3BucketURI
+            - Name: S3_PLUGINS_PATH
+              Value: !Sub
+                - '${s3bucket}/plugins.zip'
+                - s3bucket: !Ref S3BucketURI
+            - Name: S3_REQUIREMENTS_PATH
+              Value: !Sub
+                - '${s3bucket}/requirements.txt'
+                - s3bucket: !Ref S3BucketURI
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref AWS::Region
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+      RequiresCompatibilities:
+        - FARGATE
+  LoadBalancerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: 'forward'
+      Conditions:
+        - Field: path-pattern
+          Values: ["*"]
+      ListenerArn: !Ref LoadBalancerListener
+      Priority: 1
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - LoadBalancerRule
+      - LoadBalancerListener
+      - RDSDBInstance
+    Properties:
+      ServiceName: !Ref ServiceName
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: !Ref PrivateSubnetIds
+          SecurityGroups: !Ref SecurityGroups
+      LoadBalancers:
+        - ContainerName:  !Ref ServiceName
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref TargetGroup
+Outputs:
+  DBClusterEP:
+    Description: 'RDS Cluster end point'
+    Value: !GetAtt 'RDSDBCluster.Endpoint.Address'
+  LoadBalancerURL:
+    Description: 'Load Balancer URL'
+    Value: !GetAtt 'LoadBalancer.DNSName'
+  
