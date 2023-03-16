@@ -1,11 +1,3 @@
-module "rds_cluster" {
-  source = "../rds"
-
-  vpc_security_group_ids    = var.vpc_security_group_ids
-  vpc_id                    = var.vpc_id
-  mwaa_subnet_ids           = var.mwaa_subnet_ids
-
-}
 resource "aws_ecs_cluster" "cluster" {
   name = "mwaa-local-runner-cluster"
 
@@ -46,7 +38,7 @@ resource "aws_ecs_task_definition" "taskDefinition" {
         }
       },
       "environment": [
-        {"name": "AIRFLOW__CORE__SQL_ALCHEMY_CONN", "value": "postgresql+psycopg2://postgres:${module.rds_cluster.db_passsword}@${module.rds_cluster.writer_instance_endpoint}:5432/AirflowMetadata"},
+        {"name": "AIRFLOW__CORE__SQL_ALCHEMY_CONN", "value": "postgresql+psycopg2://postgres:${aws_rds_cluster.mwaa-local-runner-cluster.master_password}@${aws_rds_cluster.mwaa-local-runner-cluster.endpoint}:5432/AirflowMetadata"},
         {"name": "AIRFLOW__WEBSERVER__COOKIE_SECURE", "value": "False"},
         {"name": "DEFAULT_PASSWORD", "value": "test1234"},
         {"name": "EXECUTOR", "value": "Local"},
@@ -89,7 +81,9 @@ resource "aws_ecs_service" "ecsService" {
     container_port   = 8080
   }
     depends_on = [
-      module.rds_cluster
+      aws_rds_cluster.mwaa-local-runner-cluster,
+      aws_rds_cluster_instance.mwaa-local-runner-db-instance,
+      aws_db_subnet_group.mwaa-local-runner-subnet-group
   ]
 }
 
@@ -126,3 +120,42 @@ resource "aws_lb_target_group" "target_group" {
     path = "/health"
   }
 } 
+
+resource "aws_rds_cluster" "mwaa-local-runner-cluster" {
+  cluster_identifier = "mwaa-local-runner-db"
+  engine             = "aurora-postgresql"
+  engine_mode        = "provisioned"
+  engine_version     = "13.6"
+  database_name      = "AirflowMetadata"
+  master_username    = "postgres"
+  master_password    = random_password.password.result
+
+  db_subnet_group_name      = aws_db_subnet_group.mwaa-local-runner-subnet-group.name
+  vpc_security_group_ids    = var.vpc_security_group_ids
+  skip_final_snapshot       = true
+
+  serverlessv2_scaling_configuration {
+    max_capacity = 1.0
+    min_capacity = 0.5
+  }
+}
+
+resource "aws_rds_cluster_instance" "mwaa-local-runner-db-instance" {
+  identifier         = "mwaa-local-runner-cluster-instance"
+  cluster_identifier = aws_rds_cluster.mwaa-local-runner-cluster.id
+  instance_class     = "db.serverless"
+  engine             = aws_rds_cluster.mwaa-local-runner-cluster.engine
+  engine_version     = aws_rds_cluster.mwaa-local-runner-cluster.engine_version
+}
+
+resource "aws_db_subnet_group" "mwaa-local-runner-subnet-group" {
+  name        = "mwaa-local-runner-subnet-group"
+  description = "Allowed subnets for DB cluster instances"
+  subnet_ids  = var.mwaa_subnet_ids
+}
+
+resource "random_password" "password" {
+  length           = 16
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+}

@@ -4,17 +4,17 @@ variable "vpc_id" {
 }
 
 variable "mwaa_subnet_ids" {
-    description = "A list of subnet_ids. Specify the subnets being used with the existing MWAA environment e.g. ['subnet-12345', 'subnet-12345']"
+    description = "A list of subnet_ids. Specify the subnets being used with the existing MWAA environment e.g. [\"subnet-12345\", \"subnet-12345\"]"
     type = list(string)
 }
 
 variable "elb_subnets" {
-    description = "A list of subnet_ids. Specify public subnets if creating a public facing load balancer and private subnets if creating an internal load balancer."
+    description = "A list of subnet_ids e.g. [\"subnet-12345\", \"subnet-12345\"]. Specify public subnets if creating a public facing load balancer and private subnets if creating an internal load balancer. "
     type = list(string)
 }
 
 variable "vpc_security_group_ids" {
-    description = "A list of security groups. Specify the security group being used with the existing MWAA environment e.g. ['sg-12345']"
+    description = "A list of security groups. Specify the security group being used with the existing MWAA environment e.g. [\"sg-12345\"]"
     type = list(string)
 }
 
