@@ -1,0 +1,2 @@
+apache-airflow-providers-amazon==7.2.0
+boto3==1.26.70

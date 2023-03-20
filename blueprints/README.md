@@ -26,6 +26,11 @@ is the high level structure and the key files
 │   ├── Lambda
 │   │   ├── dags
 │   │   └── image
+|   ├── ECS
+│   │   ├── infra
+│   │   ├── mwaa
+|   |   └── README.md
+|   |
 └── infra
     ├── cdk
     ├── cloudformation
