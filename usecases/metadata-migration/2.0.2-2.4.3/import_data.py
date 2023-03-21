@@ -119,7 +119,7 @@ def getDagTasks():
     session = settings.Session()
     dagTasks = session.execute(f"select distinct ti.dag_id, ti.task_id,  ti.run_id, ti.try_number, date(r.execution_date) as ed \
         from task_instance ti, dag_run r where r.execution_date > current_date - {TI_LOG_MAX_DAYS} and \
-            ti.dag_id=r.dag_id and ti.run_id = r.run_id  order by ti.dag_id, date(r.execution_date);").fetchall()
+            ti.dag_id=r.dag_id and ti.run_id = r.run_id  and ti.state = 'failed' order by ti.dag_id, date(r.execution_date);").fetchall()
     return dagTasks
 
 # Task instance logs are created inside 'airflow-envname-Task' log group. Each instance of the task execution
