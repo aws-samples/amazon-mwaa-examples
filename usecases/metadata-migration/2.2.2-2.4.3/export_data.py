@@ -41,17 +41,18 @@ S3_KEY = Variable.get("S3_KEY", default_var='data/migration/2.2.2_to_2.4.3/expor
 dag_id = 'db_export'
 
 
-DAG_RUN_SELECT = "select dag_id, execution_date, state, run_id, external_trigger, \
+DAG_RUN_SELECT = f"select dag_id, execution_date, state, run_id, external_trigger, \
 '\\x' || encode(conf,'hex') as conf, end_date,start_date, run_type, last_scheduling_decision, \
- dag_hash, creating_job_id, null as queued_at, null as data_interval_start, null as data_interval_end  from dag_run"
+ dag_hash, creating_job_id, null as queued_at, null as data_interval_start, null as data_interval_end, \
+ 2 as log_template_id  from dag_run where dag_id != '{dag_id}'"
 
-TASK_INSTANCE_SELECT = "select ti.task_id, ti.dag_id, ti.start_date, ti.end_date, ti.duration, ti.state, \
-ti.try_number, ti.hostname, ti.unixname, ti.job_id, ti.pool, ti.queue, ti.priority_weight, \
-ti.operator, ti.queued_dttm, ti.pid, ti.max_tries, '\\x' || encode(ti.executor_config,'hex') as executor_config ,\
-ti.pool_slots, ti.queued_by_job_id, ti.external_executor_id, null as trigger_id ,\
- null as trigger_timeout, null as next_method, null as next_kwargs, r.run_id as run_id \
- from task_instance ti, dag_run r where r.dag_id = ti.dag_id AND \
-  r.run_id = ti.run_id"
+TASK_INSTANCE_SELECT = f"select task_id, dag_id,  run_id  , start_date, end_date, duration, state, \
+try_number, hostname, unixname, job_id, pool, queue, priority_weight, \
+operator, queued_dttm, pid, max_tries, '\\x' || encode(ti.executor_config,'hex') as executor_config ,\
+pool_slots, queued_by_job_id, external_executor_id, trigger_id ,\
+trigger_timeout, next_method, next_kwargs, -1 as map_index \
+ from task_instance ti where dag_id != '{dag_id}'"
+
 
 LOG_SELECT = "select dttm, dag_id, task_id, event, execution_date, owner, extra from log"
 

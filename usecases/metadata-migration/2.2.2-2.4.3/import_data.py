@@ -47,13 +47,13 @@ dag_id = 'db_import'
 DAG_RUN_IMPORT = "COPY \
 dag_run(dag_id, execution_date, state, run_id, external_trigger, \
 conf, end_date,start_date, run_type, last_scheduling_decision, \
-dag_hash, creating_job_id, queued_at, data_interval_start, data_interval_end) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
+dag_hash, creating_job_id, queued_at, data_interval_start, data_interval_end, log_template_id) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 
-TASK_INSTANCE_IMPORT = "COPY task_instance(task_id, dag_id, start_date, end_date, \
+TASK_INSTANCE_IMPORT = "COPY task_instance(task_id, dag_id, run_id, start_date, end_date, \
 duration, state, try_number, hostname, unixname, job_id, pool, \
 queue, priority_weight, operator, queued_dttm, pid, max_tries, executor_config,\
 pool_slots, queued_by_job_id, external_executor_id, trigger_id , \
-trigger_timeout, next_method, next_kwargs, run_id ) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
+trigger_timeout, next_method, next_kwargs, map_index ) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 
 TASK_FAIL_IMPORT = "COPY task_fail(task_id, dag_id, \
  start_date, end_date, duration, map_index, run_id) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
@@ -111,18 +111,18 @@ def activate_dags():
         conn.close()
 
 # Gets distinct dag, task and execution date up to the days in TI_LOG_MAX_DAYS for failed state.
-# If you need all state, remove the condition from the query
+# If you need all state, remove the condition from the query  
 
 
 def getDagTasks():
     session = settings.Session()
-    dagTasks = session.execute(f"select distinct ti.dag_id, ti.task_id, date(r.execution_date) as ed \
+    dagTasks = session.execute(f"select distinct ti.dag_id, ti.task_id, ti.run_id, ti.try_number, date(r.execution_date) as ed \
         from task_instance ti, dag_run r where r.execution_date > current_date - {TI_LOG_MAX_DAYS} and \
-            ti.dag_id=r.dag_id and ti.run_id = r.run_id and ti.state = 'failed' order by ti.dag_id, date(r.execution_date);").fetchall()
+            ti.dag_id=r.dag_id and ti.run_id = r.run_id  and ti.state = 'failed' order by ti.dag_id, date(r.execution_date);").fetchall()
     return dagTasks
 
 # Task instance logs are created inside 'airflow-envname-Task' log group. Each instance of the task execution
-# creates a log stream. Log streams gets the name from the dag, task, execution date and the try number.
+# creates a log stream. Log streams name forma is changed in 2.4.3. The script will create a new log stream name and adds the logs.
 # This function searches for log stream starting with dag, task, execution date in the old environment and copies them to new environment
 # This only copies 1 MB of data. For more logs, create code to iterate the get_log_event using next_token
 
@@ -146,6 +146,9 @@ def create_logstreams():
 
         for item in streams['logStreams']:
             streamName = item["logStreamName"]
+            runid = row['run_id'].replace(":","_")
+            newStreamName = "dag_id="+row['dag_id']+"/run_id=" + runid + \
+            "/task_id=" + row["task_id"] + "/attempt=" + str(row['try_number'])+".log"
             try:
                 # Get log events from old environment max of 1MB
                 events = client.get_log_events(
@@ -158,7 +161,7 @@ def create_logstreams():
                 if len(oldLogEvents) > 0:
                     client.create_log_stream(
                         logGroupName=logGroupName,
-                        logStreamName=streamName
+                        logStreamName=newStreamName
                     )
                     eventsToInjest = []
                     for item in oldLogEvents:
@@ -168,7 +171,7 @@ def create_logstreams():
 
                     client.put_log_events(
                         logGroupName=logGroupName,
-                        logStreamName=streamName,
+                        logStreamName=newStreamName,
                         logEvents=eventsToInjest
                     )
 
