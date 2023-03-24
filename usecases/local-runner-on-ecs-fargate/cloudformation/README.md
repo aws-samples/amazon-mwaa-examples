@@ -4,14 +4,15 @@ This sample project helps creating MWAA Sandbox environment on ECS Fargate
 ## Deployment
 
 ### Prerequisites
-- Existing MWAA Environment prerequisite steps [todo: add link]
-- AWS CLI [todo: add link]
+- This tutorial assumes you have an existing Amazon MWAA environment and wish to create a development container with a similar configuration. If you do not, please see the [Virtual Private Cloud (VPC)](https://docs.aws.amazon.com/mwaa/latest/userguide/vpc-create.html), [execution role](https://docs.aws.amazon.com/mwaa/latest/userguide/mwaa-create-role.html), and managing environments ([dags, plugins, and requirements](https://docs.aws.amazon.com/mwaa/latest/userguide/working-dags.html)) sections of the MWAA documentation.
+- Docker on your local desktop.
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-quickstart.html)
 
 ### Deploy the resources using CloudFormation template
 Make sure you are on `../usecases/local-runner-onecs-fargate/cloudformation` folder . 
 
 #### Step # 1 Prepare
-Go to your favourite code editor and update the CloudFormation template input parameters in `./parameter-values.json` 
+Update the CloudFormation template input parameters file  `./parameter-values.json` with values of your MWAA Environment network parameter values using your favourite code editor
 
 ```
 {
@@ -26,6 +27,18 @@ Go to your favourite code editor and update the CloudFormation template input pa
         "AssignPublicIpToTask" : "yes"
     }
 }
+
+where...
+- VpcId - your MWAA environment VpcID
+- ECRImageURI - AWS ECR Image Repo URI you completed in previous step
+- Securitygroups - security group or comma seperated security group ids if multiple e.g. [sg-group-id-1,sg-group-id-2]
+- PrivateSubnetIds - Private Subnet Ids especially for RDS from your mwaa environment creation stack e.g. [pvt-subnet-id-1,pvt-subnet-id-2]
+- PublicSubnetIds - Public Subnet Ids especially if need publicly accessible load balancer e.g. [public-subnet-id-1,public-subnet-id-2]
+- S3BucketURI - The S3 path to the requirements e.g. s3://my-airflow-bucket
+- ECStaskExecutionRoleArn - The task execution role ARN. If making use of the same role being used for the existing MWAA environment, make sure it has permissions to access ECR and CloudWatch e.g. arn:aws:iam::123456789:role/service-role/MwaaExecutionRole
+
+
+
 ```
 #### Step # 2 Deploy CF template
 Deploy the CloudFormation Template `./mwaa-on-ecs-fargate.yml` 
@@ -44,8 +57,8 @@ Once Deployment is completed successfully, copy Load Balancer URL (internal or p
 
 
 ### Clean up
-To clean up the resources created, run below command along with CF stack-name parameter
+To clean up the resources created, run below command along with CF stack-name. Replace stack name parameter if different.
 
 ```
-aws cloudformation delete-stack --stack-name mwaa-ecs-release
+aws cloudformation delete-stack --stack-name mwaa-ecs-sandbox
 ```
