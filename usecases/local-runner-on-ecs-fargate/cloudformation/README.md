@@ -27,7 +27,7 @@ Update the CloudFormation template input parameters file  `./parameter-values.js
         "AssignPublicIpToTask" : "yes"
     }
 }
-
+```
 where...
 - VpcId - your MWAA environment VpcID
 - ECRImageURI - AWS ECR Image Repo URI you completed in previous step
@@ -37,9 +37,6 @@ where...
 - S3BucketURI - The S3 path to the requirements e.g. s3://my-airflow-bucket
 - ECStaskExecutionRoleArn - The task execution role ARN. If making use of the same role being used for the existing MWAA environment, make sure it has permissions to access ECR and CloudWatch e.g. arn:aws:iam::123456789:role/service-role/MwaaExecutionRole
 
-
-
-```
 #### Step # 2 Deploy CF template
 Deploy the CloudFormation Template `./mwaa-on-ecs-fargate.yml` 
 
