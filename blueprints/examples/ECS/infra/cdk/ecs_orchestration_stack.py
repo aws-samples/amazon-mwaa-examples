@@ -10,14 +10,13 @@ from aws_cdk import (
     aws_mwaa as mwaa,
     aws_kms as kms,
     aws_ecs as ecs,
-    aws_ssm as ssm,
     Stack,
     CfnOutput,
     Tags
 )
 from aws_cdk.aws_ecr_assets import DockerImageAsset, NetworkMode
 from constructs import Construct
-from constructs import Construct
+from .common import constants
 
 class MWAAOrchestrationStack(Stack):
     def __init__(self, scope: Construct, construct_id: str,vpc,env,**kwargs) -> None:
@@ -124,8 +123,6 @@ class MWAAOrchestrationStack(Stack):
                         "ecs:CreateTaskSet",
                         "ecs:DeleteCluster",
                         "ecs:DeleteTaskDefinitions",
-                        "ssm:GetParameter",
-                        "ssm:PutParameter",
                         "ecs:StartTask",
                         "ecs:DescribeClusters",
                         "ecs:DeregisterTaskDefinition"
@@ -273,12 +270,35 @@ class MWAAOrchestrationStack(Stack):
             policy=kms_mwaa_policy_document
         )
         key.add_alias(f"alias/{self.stack_name}Key")
+        # Create ECR
+        spark_image_assest = DockerImageAsset(self, "SparkImage",
+            directory='./infra/spark_image/',
+            network_mode=NetworkMode.HOST
+        )
+        # ECS Task execution Role
+        ecs_tasks_service_role = iam.Role(
+            self,
+            "ecs-tasks-service-role",
+            assumed_by=iam.CompositePrincipal(
+                iam.ServicePrincipal("ecs-tasks.amazonaws.com")
+            ),
+            path="/service-role/"
+        )
         # Create MWAA environment using all the info above
+        mwaa_configuration_options = {
+            'cdk.cluster_name': constants.CLUSTER_NAME,
+            'core.default_timezone': 'utc',
+            'cdk.spark_image':spark_image_assest.image_uri,
+            'cdk.task_role':ecs_tasks_service_role.role_arn,
+            'cdk.stack_name':self.stack_name,
+            'cdk.vpc': vpc.vpc_id,
+            'cdk.subnet_id':','.join([subnet.subnet_id for subnet in vpc.private_subnets]),
+            'cdk.security_group': vpc.vpc_default_security_group
+        }
         managed_airflow = mwaa.CfnEnvironment(
             scope=self,
             id='airflow-test-environment',
             name=f"{self.stack_name}",
-            airflow_configuration_options={'core.default_timezone': 'utc'},
             airflow_version='2.4.3',
             dag_s3_path="airflow/dags",
             environment_class='mw1.small',
@@ -290,34 +310,12 @@ class MWAAOrchestrationStack(Stack):
             requirements_s3_path="airflow/requirements/requirements.txt",
             source_bucket_arn=dags_bucket_arn,
             webserver_access_mode='PUBLIC_ONLY',
+            airflow_configuration_options=mwaa_configuration_options
         )
         managed_airflow.add_override('Properties.AirflowConfigurationOptions', options)
         managed_airflow.add_override('Properties.Tags', tags)
-        # Create ECR
-        spark_image_assest = DockerImageAsset(self, "SparkImage",
-            directory='./infra/spark_image/',
-            network_mode=NetworkMode.HOST
-        )
-        # Put ECR details in SSM parameter store
-        ssm.StringParameter(self,id="SSMSparkImageURI",string_value=spark_image_assest.image_uri,
-            description="Spark Image URI", parameter_name="/ecs/mwaa/spark-image"
-        )
-        # ECS Task execution Role
-        ecs_tasks_service_role = iam.Role(
-            self,
-            "ecs-tasks-service-role",
-            assumed_by=iam.CompositePrincipal(
-                iam.ServicePrincipal("ecs-tasks.amazonaws.com")
-            ),
-            path="/service-role/"
-        )
+
         ecs_tasks_service_role.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy"))
-        # Put ECS Task service role in SSM
-        ssm.StringParameter(self,id="ECSTaskRole",string_value=ecs_tasks_service_role.role_arn,
-            description="ECS Task Role", parameter_name="/ecs/mwaa/task-role")
-        # Put stack name in SSM
-        ssm.StringParameter(self,id="StackName",string_value=self.stack_name,
-            description="Stack Name", parameter_name="/ecs/mwaa/stack-name")
         CfnOutput(
             self,
             id="SparkImageURI",

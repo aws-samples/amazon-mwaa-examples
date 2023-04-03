@@ -15,23 +15,18 @@
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import os
 import boto3
 from airflow import DAG
 from airflow.providers.amazon.aws.operators.ecs import EcsRegisterTaskDefinitionOperator
 from airflow.utils.dates import days_ago
 
-# Read ECR image URI from SSM
-SSM_CLIENT = boto3.client('ssm')
-SPARK_IMAGE = str(SSM_CLIENT.get_parameter(Name='/ecs/mwaa/spark-image', \
-    WithDecryption=True)['Parameter']['Value'])
-
-# Read ECS task from SSM
-ECS_TASK_ROLE_ARN = str(SSM_CLIENT.get_parameter(Name='/ecs/mwaa/task-role', \
-    WithDecryption=True)['Parameter']['Value'])
-
-# GET Family Name from SSM
-FAMILY_NAME = str(SSM_CLIENT.get_parameter(Name='/ecs/mwaa/stack-name', \
-    WithDecryption=True)['Parameter']['Value'])
+# ECR image URI
+SPARK_IMAGE = os.environ.get('AIRFLOW__CDK__SPARK_IMAGE')
+# ECS task
+ECS_TASK_ROLE_ARN = os.environ.get('AIRFLOW__CDK__TASK_ROLE')
+# Family Name
+FAMILY_NAME = os.environ.get('AIRFLOW__CDK__STACK_NAME')
 
 # DAG for Registering ECS Task definition
 with DAG(dag_id="register_ecs_task_definition_dag", \
@@ -57,4 +52,3 @@ with DAG(dag_id="register_ecs_task_definition_dag", \
         },
         wait_for_completion=True
     )
-    print(REGISTER_SPARK_TASK.output)

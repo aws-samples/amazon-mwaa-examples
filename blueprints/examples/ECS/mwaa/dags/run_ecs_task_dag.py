@@ -20,14 +20,10 @@ from airflow import DAG
 from airflow.providers.amazon.aws.operators.ecs import EcsRunTaskOperator
 from airflow.utils.dates import days_ago
 
-# Read paramters from SSM
-SSM_CLIENT = boto3.client('ssm')
-ECS_PRIVATE_SUBNETS = SSM_CLIENT.get_parameter(Name='/ecs/mwaa/subnets', \
-    WithDecryption=True)['Parameter']['Value']
-CLUSTER_NAME = str(SSM_CLIENT.get_parameter(Name='/ecs/mwaa/stack-name', \
-    WithDecryption=True)['Parameter']['Value'])
-TASK_DEFINITION = str(SSM_CLIENT.get_parameter(Name='/ecs/mwaa/stack-name', \
-    WithDecryption=True)['Parameter']['Value'])
+# Read paramters
+ECS_PRIVATE_SUBNETS = os.environ.get('AIRFLOW__CDK__SUBNET_ID')
+CLUSTER_NAME = os.environ.get('AIRFLOW__CDK__CLUSTER_NAME')
+TASK_DEFINITION = os.environ.get('AIRFLOW__CDK__STACK_NAME')
 LOG_GROUP = "/aws/mwaaa/blueprint"
 LOG_PREFIX = "spark"
 ECS_SECURITY_GROUP = str(SSM_CLIENT.get_parameter(Name='/ecs/mwaa/security-group', \

@@ -3,7 +3,7 @@
 
 ## Description
 
-The orchestration of Spark work load using Amazon MWAA is a very common use case for data analytics. Recently there are couple of addition in airflow operators, which easily helps in orchestrating ECS workload. This Project contains the blueprint for orchestrating spark workload on ECS cluster using Amazon MWAA.
+The orchestration of Spark work load using Amazon MWAA is a very common use case for data analytics. Recently there are couple of addition in airflow operators, which easily helps in orchestrating ECS workload. This Gitlab contains the blueprint for orchestrating spark workload on ECS cluster using Amazon MWAA.
 
 ## Getting Started
 
@@ -42,12 +42,12 @@ Install Gitlab client on MAC/Windows OS, and run below command to clone the repo
 
 For SSH use below command.
 ```
-$ git clone git@ssh.gitlab.aws.dev:mkpoddar/mwaaecsorchestrationblueprint.git
+$ git clone git@github.com:aws-samples/amazon-mwaa-examples.git
 ```
 
 For HTTPS use below command.
 ```
-$ git clone https://gitlab.aws.dev/mkpoddar/mwaaecsorchestrationblueprint.git
+$ git clone https://github.com/aws-samples/amazon-mwaa-examples.git
 ```
 
 # Bootstrap target AWS account
@@ -80,12 +80,6 @@ The solution can be deployed using command
 ```
 cdk deploy --all
 ```
-
-
-## Validation
-The solution is validated on below environment version
-* airflow==2.4.3
-* apache-airflow-providers-amazon==7.2.0
 
 
 ## Useful commands

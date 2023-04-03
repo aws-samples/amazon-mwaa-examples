@@ -15,15 +15,14 @@
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import os
 import boto3
 from airflow import DAG
 from airflow.providers.amazon.aws.operators.ecs import EcsDeleteClusterOperator
 from airflow.utils.dates import days_ago
 
-# Read cluster name from SSM
-SSM_CLIENT = boto3.client('ssm')
-CLUSTER_NAME = str(SSM_CLIENT.get_parameter(Name='/ecs/mwaa/stack-name', \
-    WithDecryption=True)['Parameter']['Value'])
+# Cluster Name
+CLUSTER_NAME = os.environ.get('AIRFLOW__CDK__CLUSTER_NAME')
 
 # DELETE ECS Cluster
 with DAG(dag_id="delete_ecs_cluster_dag", schedule_interval=None, \

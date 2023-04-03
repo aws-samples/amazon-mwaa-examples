@@ -51,18 +51,13 @@ class MWAAInfraStack(Stack):
             enable_dns_hostnames=True,
             enable_dns_support=True
         )
-        # Export ECS VPC details in SSM
-        ssm.StringParameter(self, id="AirflowVPCID", string_value=self.airflow_vpc.vpc_id, \
-            description="Airflow VPC ID", parameter_name="/ecs/mwaa/vpc-id")
-        # Export ECS Subnet details in SSM
-        ssm.StringListParameter(self, id="AirflowPrivateSubnets", \
-            string_list_value=self.airflow_vpc.select_subnets( \
-                subnet_type=ec2.SubnetType.PRIVATE_WITH_NAT).subnet_ids, \
-            description="Airflow Private Subnets", parameter_name="/ecs/mwaa/subnets")
-        # Export Security Group Details in SSM
-        ssm.StringParameter(self, id="AirflowSecurityGroup", \
-            string_value=self.airflow_vpc.vpc_default_security_group, \
-            description="Airflow Security Group", parameter_name="/ecs/mwaa/security-group")
         # Export VPC Id
         CfnOutput(self, id="VPCId", value=self.airflow_vpc.vpc_id, \
             description="MWAA VPC ID", export_name=f"MWAA:vpc-id")
+        # Export Subnet
+        CfnOutput(self, id="SubnetIds", value=','.join(self.airflow_vpc.select_subnets( \
+                subnet_type=ec2.SubnetType.PRIVATE_WITH_NAT).subnet_ids), \
+                description="MWAA Subnet IDs", export_name=f"MWAA:subnet-ids")
+        # Export Security Group
+        CfnOutput(self, id="AirflowSecurityGroup", value=self.airflow_vpc.vpc_default_security_group, \
+            description="MWAA Security Group", export_name=f"MWAA:security-group")

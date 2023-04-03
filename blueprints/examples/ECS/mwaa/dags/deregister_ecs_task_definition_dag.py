@@ -15,26 +15,24 @@
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
+import os
 import boto3
 from airflow import DAG
 from airflow.providers.amazon.aws.operators.ecs import EcsDeregisterTaskDefinitionOperator
 from airflow.utils.dates import days_ago
 
-# Read task name from SSM
-SSM_CLIENT = boto3.client('ssm')
-TASK_NAME = str(SSM_CLIENT.get_parameter(Name='/ecs/mwaa/stack-name', \
-    WithDecryption=True)['Parameter']['Value'])+":1"
-
-# Get Latest Task definition
-ECS_CLIENT = boto3.client('ecs')
-TASK_DEFINITION = ':'.join(
-    ECS_CLIENT.describe_task_definition(
-        taskDefinition=TASK_NAME
-    )['taskDefinition']['taskDefinitionArn'].split(':')[-2:]).split('/')[-1]
+# Task Name
+TASK_NAME = os.environ.get('AIRFLOW__CDK__STACK_NAME')
 
 # Deregister ECS Task Definition
 with DAG(dag_id="deregister_ecs_task_definition_dag", schedule_interval=None, \
     catchup=False, start_date=days_ago(1)) as dag:
+    # Get Latest Task definition
+    ECS_CLIENT = boto3.client('ecs')
+    TASK_DEFINITION = ':'.join(
+        ECS_CLIENT.describe_task_definition(
+            taskDefinition=TASK_NAME
+        )['taskDefinition']['taskDefinitionArn'].split(':')[-2:]).split('/')[-1]
     # Airflow Task
     DEREGISTER_TASK_DEFINITION = EcsDeregisterTaskDefinitionOperator(task_id="DEREGISTER_TASK_DEFINITION", \
         task_definition=TASK_DEFINITION, wait_for_completion=True)
