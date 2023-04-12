@@ -37,6 +37,7 @@ def data_aware_consumer():
         import boto3
         import logging
         
+        ## Read data from the S3 bucket and write it to the logs
         s3_client = boto3.client("s3")
         response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix)
         files = response.get("Contents")

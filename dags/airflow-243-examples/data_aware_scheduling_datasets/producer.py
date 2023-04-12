@@ -48,6 +48,7 @@ def data_aware_producer():
 
         url = "https://www.7timer.info/bin/astro.php?lon=113.2&lat=23.1&ac=0&unit=metric&output=json&tzshift=0"
 
+        ## Pull data from a random public API ##
         try:
             logging.info("Attempting to get data from api")
             response = requests.get(url)
@@ -60,8 +61,10 @@ def data_aware_producer():
 
         data = response.json()
 
+        ## Convert the data into a dataframe
         df = pd.DataFrame.from_records(data)
 
+        ## Upload the data to S3 as a CSV file
         with NamedTemporaryFile("w+b") as file:
             df.to_csv(file.name, index=False)
             s3_client = boto3.client('s3')
@@ -75,4 +78,5 @@ def data_aware_producer():
 
     _transfer_from_api_to_s3(S3_BUCKET_NAME, f"{S3_BUCKET_PREFIX}/test.csv")
 
+## Run the DAG
 data_aware_producer()
