@@ -1,4 +1,4 @@
-## Amazon Managed Workflows for Apache Airflow (MWAA) CloudFormation Templates
+## Amazon Managed Workflows for Apache Airflow (MWAA) using Apache Airflow 2.4.3 Examples
 
 Example CloudFormation templates for Amazon MWAA.  See [AWS CloudFormation documentation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-mwaa-environment.html) for details.
 
