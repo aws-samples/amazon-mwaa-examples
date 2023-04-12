@@ -21,9 +21,9 @@ from airflow.decorators import dag, task
 from airflow.decorators import task
 from airflow.operators.python import PythonOperator
 
-weather_dataset = Dataset("s3://airflow2.4.3parnab/data/test.csv")
+weather_dataset = Dataset("s3://YOUR_OWN_S3_BUCKET/data/test.csv")
 
-S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "airflow2.4.3parnab")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "YOUR_OWN_S3_BUCKET")
 S3_BUCKET_PREFIX = os.getenv("S3_BUCKET_PREFIX", "data")
 
 @dag(

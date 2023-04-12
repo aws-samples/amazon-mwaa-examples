@@ -2,7 +2,17 @@
 
 Example CloudFormation templates for Amazon MWAA.  See [AWS CloudFormation documentation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-mwaa-environment.html) for details.
 
-* 
+### Versions Supported
+
+### Setup 
+
+### Files
+
+### Requirements.txt needed
+
+### Plugins needed 
+
+### Explanation
 
 ## Security
 
