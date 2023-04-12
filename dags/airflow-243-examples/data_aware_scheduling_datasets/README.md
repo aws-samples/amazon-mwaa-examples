@@ -16,6 +16,7 @@ MWAA execution role should have access to read and write to the Amazon S3
 bucket configured to upload datasets. The latter is only needed if it is a different
 bucket than the MWAA bucket.
 
+**Steps**
 1. Open the producer.py file using a text editor of your choice. Change the value of "YOUR_OWN_S3_BUCKET" with the name of your own S3 Bucket. This has to be done in two places: line 24 and line 26.
 2. Open the consumer.py file using a text editor of your choice. Change the value of "YOUR_OWN_S3_BUCKET" with the name of your own S3 Bucket. This has to be done in two places: line 22 and line 24.
 3. Ensure that your Amazon MWAA Airflow 2.4.3 env has access to read and write data in the S3 bucket.
