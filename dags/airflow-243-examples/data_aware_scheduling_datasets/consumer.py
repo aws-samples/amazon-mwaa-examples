@@ -46,4 +46,5 @@ def data_aware_consumer():
 
     _list_objects(S3_BUCKET_NAME, S3_BUCKET_PREFIX) 
 
+## Run the DAG
 data_aware_consumer()

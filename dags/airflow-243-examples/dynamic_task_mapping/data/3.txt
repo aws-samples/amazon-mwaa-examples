@@ -1,0 +1,6 @@
+This is similar to defining your tasks in a for loop, 
+but instead of having the DAG file fetch the data and do that itself, 
+the scheduler can do this based on the output of a previous task. 
+Right before a mapped task is executed 
+the scheduler will create n copies of the task, 
+one for each input.

@@ -21,7 +21,7 @@ from airflow.decorators import dag, task
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.providers.amazon.aws.operators.s3 import S3ListOperator
 
-S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "airflow2.4.3parnab")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "YOUR_OWN_S3_BUCKET")
 S3_BUCKET_PREFIX = os.getenv("S3_BUCKET_PREFIX", "data")
 
 @dag(
@@ -37,12 +37,14 @@ def dynamic_task_mapping():
         prefix=S3_BUCKET_PREFIX,
     )
 
+    ## Count lines in a single file
     @task
     def count_lines(aws_conn_id, bucket, file):
         hook = S3Hook(aws_conn_id=aws_conn_id)
 
         return len(hook.read_key(file, bucket).splitlines())
 
+    ## Count total lines across files
     @task
     def total(lines):
         return sum(lines)
@@ -52,4 +54,5 @@ def dynamic_task_mapping():
     )
     total(lines=counts)
 
+## Run the DAG
 dynamic_task_mapping()

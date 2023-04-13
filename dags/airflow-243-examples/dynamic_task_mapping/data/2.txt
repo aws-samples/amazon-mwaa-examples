@@ -1,0 +1,4 @@
+Dynamic Task Mapping allows 
+a way for a workflow to create a number of tasks at runtime 
+based upon current data, 
+rather than the DAG author having to know in advance how many tasks would be needed.
