@@ -21,13 +21,16 @@ bucket than the MWAA bucket.
 2. Upload the files 1.txt, 2.txt and 3.txt that you would find the data directory to the S3 bucket under a folder prefix data. The final location of your files would be "YOUR_OWN_S3_BUCKET/data/1.txt", "YOUR_OWN_S3_BUCKET/data/2.txt" and "YOUR_OWN_S3_BUCKET/data/3.txt".
 3. Ensure that your Amazon MWAA Airflow 2.4.3 env has access to read and write data in the S3 bucket.
 4. Upload the `dynamic_task_mapping.py` file to the S3 bucket that is configured for your MWAA environment.
-5. Enable the DAGs with id **"dynamic_task_mapping_get_input"** once they appear in the Airflow UI. 
-6. Manually trigger the DAG with id **"dynamic_task_mapping_get_input"** from your Airflow UI.
+5. Enable the DAGs with id **"dynamic_task_mapping"** once they appear in the Airflow UI. 
+6. Manually trigger the DAG with id **"dynamic_task_mapping"** from your Airflow UI.
 7. Wait for it to complete execution. Review the Airflow logs. You would find the statement "Done. Returned value was: 40". This represents the sum of lines in the 3 files 1.txt, 2.txt and 3.txt.
 
 ### Files
 
 dynamic_task_mapping.py
+data/1.txt
+data/2.txt
+data/3.txt
 
 ### Requirements.txt needed
 None
