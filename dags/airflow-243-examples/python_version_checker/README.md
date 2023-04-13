@@ -8,6 +8,7 @@ Apache Airflow 2.4.3 on Amazon MWAA.
 ### Setup 
 **Pre-Requisites**
 - An Amazon MWAA environment configured with Apache Airflow v2.4.3. 
+
 **Steps**
 1. Upload the `python-version.py` file to S3 Bucket that is configured for your MWAA environment.
 2. Enable the DAGs with id **"python_version_checker"** once they appear in the Airflow UI. 
