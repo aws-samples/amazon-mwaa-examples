@@ -33,7 +33,7 @@ The module iterates through the list of sql statement and table, reads data and 
 Before it exports the data, it copies all the active dags and pause the execution of all other DAG.
 """
 # S3 bucket where the exported file are
-S3_BUCKET = Variable.get("S3_BUCKET", default_var='your_s3_bucket')
+S3_BUCKET = Variable.get("S3_BUCKET", default_var='your-s3-bucket')
 # S3 prefix where the exported file are
 S3_KEY = Variable.get("S3_KEY", default_var='data/migration/2.0.2_to_2.4.3/export/')
 
@@ -50,7 +50,8 @@ dag_id = 'db_export'
 
 DAG_RUN_SELECT = "select dag_id, execution_date, state, run_id, external_trigger, \
 '\\x' || encode(conf,'hex') as conf, end_date,start_date, run_type, last_scheduling_decision, \
- dag_hash, creating_job_id, null as queued_at, null as data_interval_start, null as data_interval_end, null as log_template_id from dag_run"
+ dag_hash, creating_job_id, null as queued_at, null as data_interval_start, null as data_interval_end, \
+ 2 as log_template_id from dag_run  where dag_id != '{dag_id}'"
 
 TASK_INSTANCE_SELECT = "select ti.task_id, ti.dag_id,  r.run_id as run_id , ti.start_date, ti.end_date, ti.duration, ti.state, \
 ti.try_number, ti.hostname, ti.unixname, ti.job_id, ti.pool, ti.queue, ti.priority_weight, \
@@ -58,7 +59,7 @@ ti.operator, ti.queued_dttm, ti.pid, ti.max_tries, '\\x' || encode(ti.executor_c
 ti.pool_slots, ti.queued_by_job_id, ti.external_executor_id, null as trigger_id ,\
  null as trigger_timeout, null as next_method, null as next_kwargs, -1 as map_index\
  from task_instance ti, dag_run r where r.dag_id = ti.dag_id AND \
-  r.execution_date = ti.execution_date"
+  r.execution_date = ti.execution_date AND ti.dag_id != '{dag_id}'"
 
 LOG_SELECT = "select dttm, dag_id, task_id, event, execution_date, owner, extra, -1 as map_index from log"
 

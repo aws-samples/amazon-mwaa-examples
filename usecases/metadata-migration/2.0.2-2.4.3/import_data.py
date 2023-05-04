@@ -32,7 +32,7 @@ This module also copies a configurabled days of task instance log from Cloud Wat
 
 """
 # S3 bucket where the exported file are
-S3_BUCKET = Variable.get("S3_BUCKET", default_var='your_s3_bucket')
+S3_BUCKET = Variable.get("S3_BUCKET", default_var='your-s3-bucket')
 # S3 prefix where the exported file are
 S3_KEY = Variable.get("S3_KEY", default_var='data/migration/2.0.2_to_2.4.3/export/')
 # old environment name. Used to export CW log
@@ -117,9 +117,9 @@ def activate_dags():
 
 def getDagTasks():
     session = settings.Session()
-    dagTasks = session.execute(f"select distinct ti.dag_id, ti.task_id, date(r.execution_date) as ed \
+    dagTasks = session.execute(f"select distinct ti.dag_id, ti.task_id,  ti.run_id, ti.try_number, date(r.execution_date) as ed \
         from task_instance ti, dag_run r where r.execution_date > current_date - {TI_LOG_MAX_DAYS} and \
-            ti.dag_id=r.dag_id and ti.run_id = r.run_id and ti.state = 'failed' order by ti.dag_id, date(r.execution_date);").fetchall()
+            ti.dag_id=r.dag_id and ti.run_id = r.run_id  and ti.state = 'failed' order by ti.dag_id, date(r.execution_date);").fetchall()
     return dagTasks
 
 # Task instance logs are created inside 'airflow-envname-Task' log group. Each instance of the task execution
@@ -147,6 +147,9 @@ def create_logstreams():
 
         for item in streams['logStreams']:
             streamName = item["logStreamName"]
+            runid = row['run_id'].replace(":","_")
+            newStreamName = "dag_id="+row['dag_id']+"/run_id=" + runid + \
+            "/task_id=" + row["task_id"] + "/attempt=" + str(row['try_number'])+".log"
             try:
                 # Get log events from old environment max of 1MB
                 events = client.get_log_events(
@@ -159,7 +162,7 @@ def create_logstreams():
                 if len(oldLogEvents) > 0:
                     client.create_log_stream(
                         logGroupName=logGroupName,
-                        logStreamName=streamName
+                        logStreamName=newStreamName
                     )
                     eventsToInjest = []
                     for item in oldLogEvents:
@@ -169,7 +172,7 @@ def create_logstreams():
 
                     client.put_log_events(
                         logGroupName=logGroupName,
-                        logStreamName=streamName,
+                        logStreamName=newStreamName,
                         logEvents=eventsToInjest
                     )
 
