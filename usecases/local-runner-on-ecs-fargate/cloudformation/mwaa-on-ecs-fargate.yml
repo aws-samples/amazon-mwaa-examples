@@ -12,7 +12,7 @@ Parameters:
     Description: How much CPU to give the container. 1024 is 1 CPU
   ContainerMemory:
     Type: Number
-    Default: 512
+    Default: 1024
     Description: How much memory in megabytes to give the container
   ContainerPort:
     Type: Number
@@ -67,7 +67,7 @@ Parameters:
     Default: arn:aws:iam::0123456789:role/service-role/execution-role-name
   AssignPublicIpToTask:
     Type: String
-    Description: If using public subnets for MWAA environment, specify as true. Else, specify as false
+    Description: If using public subnets for MWAA environment, specify as true. Else, specify as false. This will be used to create a public or internal load balancer.
     Default: "yes"
     AllowedValues: ["yes","no"]
 Conditions:
@@ -104,16 +104,16 @@ Resources:
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      HealthCheckIntervalSeconds: 6
-      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /health
       HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 5
-      HealthyThresholdCount: 2
+      HealthCheckTimeoutSeconds: 25
+      HealthyThresholdCount: 5
       TargetType: ip
       Name:  !Ref ServiceName
       Port: !Ref ContainerPort
       Protocol: HTTP
-      UnhealthyThresholdCount: 2
+      UnhealthyThresholdCount: 5
       VpcId: !Ref VpcId
   LoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -229,9 +229,10 @@ Resources:
       TaskDefinition: !Ref TaskDefinition
       DesiredCount: 1
       LaunchType: FARGATE
+      HealthCheckGracePeriodSeconds: 10
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: ENABLED
+          AssignPublicIp: DISABLED
           Subnets: !Ref PrivateSubnetIds
           SecurityGroups: !Ref SecurityGroups
       LoadBalancers:
