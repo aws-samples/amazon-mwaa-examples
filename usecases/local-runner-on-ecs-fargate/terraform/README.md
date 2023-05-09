@@ -45,17 +45,17 @@ var.region
 var.s3_dags_path
   The S3 path to the DAGs e.g. s3://my-airflow-bucket/dags
 
-  Enter a value: s3://airflow-mwaa-nasika/DAG/
+  Enter a value: s3://airflow-mwaa-test/DAG/
 
 var.s3_plugins_path
   The S3 path to the plugins e.g. s3://my-airflow-bucket/plugins.zip
 
-  Enter a value: s3://airflow-mwaa-nasika/plugins.zip
+  Enter a value: s3://airflow-mwaa-test/plugins.zip
 
 var.s3_requirements_path
   The S3 path to the requirements e.g. s3://my-airflow-bucket/requirements.txt
 
-  Enter a value: s3://airflow-mwaa-nasika/requirements.txt
+  Enter a value: s3://airflow-mwaa-test/requirements.txt
 
 var.vpc_id
   The VPC ID. Specify the VPC ID being used with the MWAA environment.
