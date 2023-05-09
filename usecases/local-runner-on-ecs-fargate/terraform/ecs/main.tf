@@ -34,6 +34,7 @@ resource "aws_ecs_task_definition" "taskDefinition" {
         "options" : {
           "awslogs-group" : "/ecs/mwaa-local-runner-task-definition",
           "awslogs-stream-prefix" : "ecs",
+          "awslogs-create-group": "true",
           "awslogs-region": var.region
         }
       },
