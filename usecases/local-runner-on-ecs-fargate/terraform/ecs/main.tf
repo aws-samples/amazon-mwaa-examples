@@ -118,9 +118,9 @@ resource "aws_lb_target_group" "target_group" {
   target_type = "ip"
   vpc_id      = var.vpc_id
   health_check {
-    path     = "/health"
-    interval = 30
-    timeout  = 25
+    path                = "/health"
+    interval            = 30
+    timeout             = 25
     healthy_threshold   = 5
     unhealthy_threshold = 5
   }
