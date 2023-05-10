@@ -2,6 +2,9 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description:  This template deploys local-runner on ECS Fargate cluster on a VPC which hosts MWAA Environment and Serverless Aurora PostgreSQL database. Please select 
  ensure the same VPC, Private/Public Subnets, and Security Group(s) from main your MWAA environment. 
 Parameters:
+  ECSClusterName:
+    Type: String
+    Default: mwaa-local-runner-cluster
   VpcId:
     Type: AWS::EC2::VPC::Id
     Description: The VPC ID. Specify the VPC ID being used with the MWAA environment.
@@ -137,7 +140,7 @@ Resources:
   Cluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: mwaa-local-runner-cluster
+      ClusterName: !Ref ECSClusterName
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:

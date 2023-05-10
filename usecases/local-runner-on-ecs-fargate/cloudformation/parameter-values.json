@@ -1,8 +1,9 @@
 {
     "Parameters": {
-        "VpcId": "vpc-your-mwaa-vpc-id",
+        "ECSClusterName": "mwaa-local-runner-cluster",
+        "VpcId": "your-mwaa-vpc-id",
         "ECRImageURI" : "123456789.dkr.ecr.us-east-1.amazonaws.com/mwaa-local-runner:latest",
-        "SecurityGroups" : "sg-security-group-id",
+        "SecurityGroups" : "security-group-id",
         "PrivateSubnetIds" : "subnet-mwaapvtsubnetid1,subnet-mwaapvtsubnetid2",
         "PublicSubnetIds" : "subnet-mwaapublicsubnetid1,subnet-mwaapublicsubnetid2",
         "S3BucketURI" : "s3://your-mwaa-bucket-path",
