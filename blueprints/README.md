@@ -19,6 +19,11 @@ is the high level structure and the key files
 │   ├── EMR
 │   │   ├── dags
 │   │   └── spark
+|   ├── ECS
+│   │   ├── infra
+│   │   ├── mwaa
+|   |   └── README.md
+|   |
 │   ├── EMR_on_EKS
 │   │   ├── infra
 │   │   ├── dags
