@@ -1,6 +1,6 @@
 <!-- TOC ignore:true -->
 
-# Automate Stopping and Starting an Amazon MWAA Environment using CDK
+# Automate Stopping and Starting an Amazon MWAA Environment
 
 <!-- TOC ignore:true -->
 

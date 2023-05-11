@@ -158,7 +158,7 @@ def export_connection(**context):
 
 
             w.writerow({k[0]: y.conn_id, k[1]: y.conn_type, k[2]: y.description, k[3]: y.host,
-                        k[4]: y.login, k[5]: y.get_password(),k[6]: y.schema, k[7]: y.port(),
+                        k[4]: y.login, k[5]: y.get_password(),k[6]: y.schema, k[7]: y.port,
                         k[8]: y.get_extra()})
 
         outkey = S3_KEY + 'connection.csv'
