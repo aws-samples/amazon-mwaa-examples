@@ -1,0 +1,15 @@
+{
+  "name": "mwaa-pause-resume-lambdas",
+  "version": "0.1.0",
+  "description": "Lambdas for MWAA pause resume stack",
+  "private": true,
+  "devDependencies": {
+    "@types/node": "*",
+    "@types/uuid": "*"
+  },
+  "dependencies": {
+    "@aws-sdk/client-mwaa": "*",
+    "uuid": "*",
+    "axios": "*"
+  }
+}
