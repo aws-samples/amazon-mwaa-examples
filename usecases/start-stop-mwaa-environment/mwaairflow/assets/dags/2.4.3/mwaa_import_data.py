@@ -316,5 +316,5 @@ with DAG(dag_id=dag_id, schedule_interval=None, catchup=False,  default_args=def
         provide_context=True
     )
     activate_dags_t >> notify_success_t
-
+    taskfail_dagrun >> notify_success_t
     load_ds_dagrun >> notify_success_t
