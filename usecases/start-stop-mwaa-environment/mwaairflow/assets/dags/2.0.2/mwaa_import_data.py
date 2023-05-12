@@ -46,10 +46,10 @@ dag_hash, creating_job_id) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 
 TASK_INSTANCE_IMPORT = "COPY task_instance(task_id, dag_id, execution_date, start_date, end_date, \
 duration, state, try_number, hostname, unixname, job_id, pool, \
-queue, priority_weight, operator, queued_dttm, pid, max_tries, executor_config,\
+queue, priority_weight, operator, queued_dttm, pid, max_tries, executor_config, \
 pool_slots, queued_by_job_id, external_executor_id) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 
-TASK_FAIL_IMPORT = "COPY task_fail(task_id, dag_id, execution_date\
+TASK_FAIL_IMPORT = "COPY task_fail(task_id, dag_id, execution_date, \
  start_date, end_date, duration) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 
 
@@ -74,7 +74,7 @@ TOPTABLES_TO_IMPORT = [
 
 ]
 
-    
+
 # pause all dags before starting export
 def pause_dags():
     session = settings.Session()
@@ -159,7 +159,7 @@ def importConnection(**context):
     session.commit()
     session.close()
 
-    
+
 
 
 def load_data(**context):
@@ -277,5 +277,6 @@ with DAG(dag_id=dag_id, schedule_interval=None, catchup=False,  default_args=def
         python_callable=notify_success,
         provide_context=True
     )
+    taskfail_dagrun >> notify_success_t
     activate_dags_t >> notify_success_t
 

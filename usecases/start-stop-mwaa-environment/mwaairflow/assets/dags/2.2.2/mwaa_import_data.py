@@ -278,5 +278,6 @@ with DAG(dag_id=dag_id, schedule_interval=None, catchup=False,  default_args=def
         python_callable=notify_success,
         provide_context=True
     )
+    taskfail_dagrun >> notify_success_t
     activate_dags_t >> notify_success_t
 
