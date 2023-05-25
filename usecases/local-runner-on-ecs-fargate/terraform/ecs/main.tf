@@ -34,6 +34,7 @@ resource "aws_ecs_task_definition" "taskDefinition" {
         "options" : {
           "awslogs-group" : "/ecs/mwaa-local-runner-task-definition",
           "awslogs-stream-prefix" : "ecs",
+          "awslogs-create-group": "true",
           "awslogs-region": var.region
         }
       },
@@ -117,7 +118,11 @@ resource "aws_lb_target_group" "target_group" {
   target_type = "ip"
   vpc_id      = var.vpc_id
   health_check {
-    path = "/health"
+    path              = "/health"
+    interval            = 30
+    timeout             = 25
+    healthy_threshold   = 5
+    unhealthy_threshold = 5
   }
 } 
 
@@ -157,5 +162,5 @@ resource "aws_db_subnet_group" "mwaa-local-runner-subnet-group" {
 resource "random_password" "password" {
   length           = 16
   special          = true
-  override_special = "!#$%&*()-_=+[]{}<>:?"
+  override_special = "!#$%&*()-_=+{}<>:?"
 }

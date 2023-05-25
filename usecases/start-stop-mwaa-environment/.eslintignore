@@ -1,0 +1,7 @@
+reports/
+node_modules/
+coverage/
+bin/
+
+**/*.d.ts
+**/*.js
