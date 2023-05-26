@@ -1,2 +1,2 @@
-apache-airflow-providers-amazon==7.2.0
+apache-airflow-providers-amazon==7.2.1
 boto3==1.26.70
