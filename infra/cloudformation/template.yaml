@@ -1,0 +1,354 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  S3Bucket:
+    Type: String
+    Description: S3Bucket Where the dags are stored
+
+  EnvironmentName:
+    Description: An environment name that is prefixed to resource names
+    Type: String
+    Default: MWAAEnvironment
+
+  # RequirementsFileVersion:
+  #   Description: Requirements file S3 object version
+  #   Type: String
+
+  # PluginsVersion:
+  #   Description: Plugins file S3 object version
+  #   Type: String
+    
+  VpcCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.193.0.0/16
+
+  PrivateSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
+    Type: String
+    Default: 10.193.20.0/24
+
+  PrivateSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
+    Type: String
+    Default: 10.193.21.0/24
+    
+  AirflowVersion:
+    Description: Airflow Version
+    Type: String
+    Default: 2.5.1
+
+
+Resources:
+  #####################################################################################################################
+  # CREATE VPC
+  #####################################################################################################################
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: MWAAEnvironment
+
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Subnet (AZ1)
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Subnet (AZ2)
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Routes (AZ1)
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet1
+    
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet2
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Security Group for Amazon MWAA Environments to access VPC endpoints
+      GroupName: !Sub "${AWS::StackName}-mwaa-vpc-endpoints"
+   
+  SecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: "-1"
+      SourceSecurityGroupId: !Ref SecurityGroup
+  SqsVpcEndoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.sqs"
+      VpcEndpointType: Interface
+      VpcId: !Ref VPC
+      PrivateDnsEnabled: true
+      SubnetIds:
+      - !Ref PrivateSubnet1
+      - !Ref PrivateSubnet2
+      SecurityGroupIds:
+      - !Ref SecurityGroup
+  CloudWatchLogsVpcEndoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.logs"
+      VpcEndpointType: Interface
+      VpcId: !Ref VPC
+      PrivateDnsEnabled: true
+      SubnetIds:
+      - !Ref PrivateSubnet1
+      - !Ref PrivateSubnet2
+      SecurityGroupIds:
+      - !Ref SecurityGroup
+  CloudWatchMonitoringVpcEndoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.monitoring"
+      VpcEndpointType: Interface
+      VpcId: !Ref VPC
+      PrivateDnsEnabled: true
+      SubnetIds:
+      - !Ref PrivateSubnet1
+      - !Ref PrivateSubnet2
+      SecurityGroupIds:
+      - !Ref SecurityGroup
+  KmsVpcEndoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.kms"
+      VpcEndpointType: Interface
+      VpcId: !Ref VPC
+      PrivateDnsEnabled: true
+      SubnetIds:
+      - !Ref PrivateSubnet1
+      - !Ref PrivateSubnet2
+      SecurityGroupIds:
+      - !Ref SecurityGroup
+     
+  EcrApiVpcEndoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecr.api"
+      VpcEndpointType: Interface
+      VpcId: !Ref VPC
+      PrivateDnsEnabled: true
+      SubnetIds:
+      - !Ref PrivateSubnet1
+      - !Ref PrivateSubnet2
+      SecurityGroupIds:
+      - !Ref SecurityGroup
+  EcrDkrVpcEndoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecr.dkr"
+      VpcEndpointType: Interface
+      VpcId: !Ref VPC
+      PrivateDnsEnabled: true
+      SubnetIds:
+      - !Ref PrivateSubnet1
+      - !Ref PrivateSubnet2
+      SecurityGroupIds:
+      - !Ref SecurityGroup
+
+  S3VpcEndoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcEndpointType: Gateway
+      VpcId: !Ref VPC
+      RouteTableIds:
+      - !Ref PrivateRouteTable
+
+
+  NoIngressSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "no-ingress-sg"
+      GroupDescription: "Security group with no ingress rule"
+      VpcId: !Ref VPC
+
+
+  #####################################################################################################################
+  # CREATE MWAA
+  #####################################################################################################################
+  MWAAEnvName:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /mwaa/cicd/${AWS::StackName}/name
+      Type: String
+      Value: !Ref MwaaEnvironment
+      
+  MwaaEnvironment:
+    Type: AWS::MWAA::Environment
+    DependsOn: MwaaExecutionPolicy
+    Properties:
+      AirflowVersion: !Ref AirflowVersion
+      Name: !Sub "${AWS::StackName}-MwaaEnvironment"
+      SourceBucketArn: !Sub "arn:aws:s3:::${S3Bucket}"
+      ExecutionRoleArn: !GetAtt MwaaExecutionRole.Arn
+      DagS3Path: dags
+      # RequirementsS3Path: requirements.txt
+      # RequirementsS3ObjectVersion: !Ref RequirementsFileVersion
+      # PluginsS3Path: plugins/plugins.zip
+      # PluginsS3ObjectVersion: !Ref PluginsVersion
+      NetworkConfiguration: 
+        SecurityGroupIds:
+          - !GetAtt SecurityGroup.GroupId
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+      WebserverAccessMode: PUBLIC_ONLY
+      MaxWorkers: 2
+      LoggingConfiguration:
+        DagProcessingLogs:
+          LogLevel: INFO
+          Enabled: true
+        SchedulerLogs:
+          LogLevel: INFO
+          Enabled: true
+        TaskLogs:
+          LogLevel: INFO
+          Enabled: true
+        WorkerLogs:
+          LogLevel: INFO
+          Enabled: true
+        WebserverLogs:
+          LogLevel: INFO
+          Enabled: true
+  
+
+  MwaaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - airflow-env.amazonaws.com
+                - airflow.amazonaws.com
+            Action:
+             - "sts:AssumeRole"
+      Path: "/service-role/"
+
+  MwaaExecutionPolicy:
+    # DependsOn: EnvironmentBucket
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Roles:
+        - !Ref MwaaExecutionRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: airflow:PublishMetrics
+            Resource:
+              - !Sub "arn:aws:airflow:${AWS::Region}:${AWS::AccountId}:environment/${AWS::StackName}-MwaaEnvironment"
+          - Effect: Deny
+            Action: s3:ListAllMyBuckets
+            Resource:
+              - !Sub "arn:aws:s3:::${S3Bucket}"
+          - Effect: Allow
+            Action:
+              - "s3:*"
+            Resource:
+              - !Sub "arn:aws:s3:::${S3Bucket}"
+              - !Sub "arn:aws:s3:::${S3Bucket}/*"
+          - Effect: Allow
+            Action:
+              - logs:DescribeLogGroups
+            Resource: "*"
+
+          - Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+              - logs:PutLogEvents
+              - logs:GetLogEvents
+              - logs:GetLogRecord
+              - logs:GetLogGroupFields
+              - logs:GetQueryResults
+              - logs:DescribeLogGroups
+            Resource:
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:airflow-${AWS::StackName}*"
+          - Effect: Allow
+            Action: cloudwatch:PutMetricData
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - sqs:ChangeMessageVisibility
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+              - sqs:GetQueueUrl
+              - sqs:ReceiveMessage
+              - sqs:SendMessage
+            Resource:
+              - !Sub "arn:aws:sqs:${AWS::Region}:*:airflow-celery-*"
+          - Effect: Allow
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+              - "kms:GenerateDataKey*"
+              - kms:Encrypt
+            NotResource: !Sub "arn:aws:kms:*:${AWS::AccountId}:key/*"
+            Condition:
+              StringLike:
+                "kms:ViaService":
+                  - !Sub "sqs.${AWS::Region}.amazonaws.com"
+Outputs:
+  VPC:
+    Description: A reference to the created VPC
+    Value: !Ref VPC
+
+
+  PrivateSubnets:
+    Description: A list of the private subnets
+    Value: !Join [ ",", [ !Ref PrivateSubnet1, !Ref PrivateSubnet2 ]]
+
+
+  PrivateSubnet1:
+    Description: A reference to the private subnet in the 1st Availability Zone
+    Value: !Ref PrivateSubnet1
+
+  PrivateSubnet2:
+    Description: A reference to the private subnet in the 2nd Availability Zone
+    Value: !Ref PrivateSubnet2
+
+  MwaaApacheAirflowUI:
+    Description: MWAA Environment
+    Value: !Sub  "https://${MwaaEnvironment.WebserverUrl}"

@@ -21,10 +21,6 @@ _Note: If you do not have running MWAA environment, deploy it from the root of t
 
 Clone the repository
 
-```sh
-git clone <repo>
-```
-
 Navigate into one of the example directories and run `make` by passing MWAA environment related arguments
 
 ```sh

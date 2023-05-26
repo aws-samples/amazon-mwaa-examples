@@ -2,7 +2,7 @@
 
 ## Description
 
-This is a collection of getting started blueprints for using Amazon Managed Workflows for Apache Airflow (MWAA). Below
+This is a collection of getting started blueprints for building pipelines that run in Amazon Managed Workflows for Apache Airflow (MWAA). Below
 is the high level structure and the key files
 
 ```sh
@@ -32,7 +32,6 @@ is the high level structure and the key files
 │   │   ├── dags
 │   │   └── image
 └── infra
-    ├── cdk
     ├── cloudformation
     └── terraform
 ```
@@ -47,20 +46,23 @@ is the high level structure and the key files
 - **examples:** This folder has a collection of technology specific DAGs organized into specific subfolders. Review the
   subfolders for details
 
-- **infra:** This folder has the infrastructure setup needed t o run the examples. Infrastructures are based
-  on ```cloudformation```, ```cdk``` and ```terraform```.
+- **infra:** This folder has the infrastructure as code samples for creating example MWAA environment
 
-## Badges
+
 
 ## Installation
 
 ### CDK
-This example cretes MWAA environment and has the DAGs to create an EKS cluster. 
+This example creates MWAA environment along with permissions related to EKS. 
 Setup Environment and execute examples [cdk](examples/EKS/README.md)
  
 ### Terraform
 
-Access [terraform](infra/terraform/README.md)
+Access [terraform](../infra/terraform/README.md)
+
+### AWS CloudFormation
+
+Access [CloudFormation](../infra/cloudformation/README.md)
 
 #### Examples
 
