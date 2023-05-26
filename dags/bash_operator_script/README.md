@@ -56,7 +56,7 @@ CLI_TOKEN=$(echo $CLI_JSON | jq -r '.CliToken') \
     && STD_ERROR=$(echo $CLI_RESULTS | jq -r '.stderr' | base64 --decode) \
     && echo $STD_ERROR
 ```
-A full explanation of the above command [can be found here](tinyurl.com/2mj7zfxu)
+A full explanation of the above command [can be found here](https://tinyurl.com/2mj7zfxu)
 
 The log stream is found using the following line which assumes the task name is **bash_command**
 
