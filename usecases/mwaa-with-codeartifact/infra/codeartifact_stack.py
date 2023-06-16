@@ -1,9 +1,10 @@
-from aws_cdk import core
+from aws_cdk import Resource, Stack
 import aws_cdk.aws_codeartifact as codeartifact
+from constructs import Construct
 
 
-class CodeArtifactStack(core.Stack):
-    def __init__(self, scope: core.Construct, id: str, **kwargs) -> None:
+class CodeArtifactStack(Stack):
+    def __init__(self, scope: Construct, id: str, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
         ca_domain = codeartifact.CfnDomain(
@@ -20,5 +21,5 @@ class CodeArtifactStack(core.Stack):
         self._repo.add_depends_on(ca_domain)
 
     @property
-    def repo(self) -> core.Resource:
+    def repo(self) -> Resource:
         return self._repo

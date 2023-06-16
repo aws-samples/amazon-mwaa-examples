@@ -1,9 +1,10 @@
-from aws_cdk import core, aws_ec2 as ec2
+from aws_cdk import aws_ec2 as ec2, CfnOutput, Resource, Stack, Tags
+from constructs import Construct
 from typing import List
 
 
-class VpcStack(core.Stack):
-    def __init__(self, scope: core.Construct, id: str, **kwargs) -> None:
+class VpcStack(Stack):
+    def __init__(self, scope: Construct, id: str, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
         self._instance = ec2.Vpc(
@@ -19,10 +20,10 @@ class VpcStack(core.Stack):
         self.create_security_groups()
         self.create_endpoints()
         self.tag_subnets()
-        core.CfnOutput(self, "Output", value=self._instance.vpc_id)
+        CfnOutput(self, "Output", value=self._instance.vpc_id)
 
     @property
-    def instance(self) -> core.Resource:
+    def instance(self) -> Resource:
         return self._instance
 
     @property
@@ -89,5 +90,5 @@ class VpcStack(core.Stack):
     def tag_subnets(self) -> None:
         selection = self.instance.select_subnets(subnet_type=ec2.SubnetType.ISOLATED)
         for subnet in selection.subnets:
-            core.Tags.of(subnet).add("Name", f"mwaa-private-{subnet.availability_zone}")
-        core.Tags.of(self.instance).add("Name", "private-mwaa-vpc")
+            Tags.of(subnet).add("Name", f"mwaa-private-{subnet.availability_zone}")
+        Tags.of(self.instance).add("Name", "private-mwaa-vpc")
