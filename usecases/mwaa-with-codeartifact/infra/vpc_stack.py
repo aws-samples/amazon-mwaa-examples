@@ -11,7 +11,7 @@ class VpcStack(Stack):
             self,
             "mwaa-vpc",
             max_azs=2,
-            cidr="10.0.0.0/16",
+            ip_addresses=ec2.IpAddresses.cidr("10.0.0.0/16"),
             subnet_configuration=self.subnets,
             enable_dns_hostnames=True,
             enable_dns_support=True,
@@ -29,14 +29,16 @@ class VpcStack(Stack):
     @property
     def get_vpc_private_subnet_ids(self) -> ec2.SelectedSubnets:
         return self.instance.select_subnets(
-            subnet_type=ec2.SubnetType.ISOLATED
+            subnet_type=ec2.SubnetType.PRIVATE_ISOLATED
         ).subnet_ids
 
     @property
     def subnets(self) -> List:
         return [
             ec2.SubnetConfiguration(
-                subnet_type=ec2.SubnetType.ISOLATED, name="mwaa-private", cidr_mask=24
+                subnet_type=ec2.SubnetType.PRIVATE_ISOLATED,
+                name="mwaa-private",
+                cidr_mask=24,
             ),
         ]
 
@@ -76,7 +78,9 @@ class VpcStack(Stack):
                 name,
                 vpc=self.instance,
                 service=service,
-                subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.ISOLATED),
+                subnets=ec2.SubnetSelection(
+                    subnet_type=ec2.SubnetType.PRIVATE_ISOLATED
+                ),
                 private_dns_enabled=True,
                 security_groups=[self.mwaa_sg],
             )
@@ -84,11 +88,13 @@ class VpcStack(Stack):
         self.instance.add_gateway_endpoint(
             "s3-endpoint",
             service=ec2.GatewayVpcEndpointAwsService.S3,
-            subnets=[ec2.SubnetSelection(subnet_type=ec2.SubnetType.ISOLATED)],
+            subnets=[ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_ISOLATED)],
         )
 
     def tag_subnets(self) -> None:
-        selection = self.instance.select_subnets(subnet_type=ec2.SubnetType.ISOLATED)
+        selection = self.instance.select_subnets(
+            subnet_type=ec2.SubnetType.PRIVATE_ISOLATED
+        )
         for subnet in selection.subnets:
             Tags.of(subnet).add("Name", f"mwaa-private-{subnet.availability_zone}")
         Tags.of(self.instance).add("Name", "private-mwaa-vpc")

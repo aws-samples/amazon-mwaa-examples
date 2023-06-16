@@ -18,7 +18,7 @@ class CodeArtifactStack(Stack):
             external_connections=["public:pypi"],
             description="This is demo repo for MWAA.",
         )
-        self._repo.add_depends_on(ca_domain)
+        self._repo.add_dependency(ca_domain)
 
     @property
     def repo(self) -> Resource:
