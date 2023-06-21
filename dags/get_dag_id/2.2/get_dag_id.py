@@ -36,6 +36,35 @@ only needed during task execution.
 
 import setproctitle, ast
 
+"""
+Skip any flags provided to the process, per 
+https://airflow.apache.org/docs/apache-airflow/stable/cli-and-env-variables-ref.html#run
+"""
+
+skip_two = [
+    '--cfg-path',
+    '-d', '--depends-on-past',
+    '--map-index',
+    '-p', '--pickle',
+    '--pool',
+    '-S', '--subdir'
+]
+  
+def parse_args(args, n):
+    if len(args) > 0:    
+        while n<len(args):
+            curr = args[n]
+            if not curr.startswith('-'):
+                break
+            elif curr in skip_two:
+                n=n+2
+            else:
+                n=n+1  
+    return curr
+
+"""
+Using the process information, determine the DAG ID
+"""    
 def GetCurrentDag():
     current_dag = None
     try:
@@ -50,17 +79,17 @@ def GetCurrentDag():
                 args_string = proctitle[len(PROCTITLE_SUPERVISOR_PREFIX):]
                 args = ast.literal_eval(args_string)
                 if len(args) > 3 and args[1] == "tasks":
-                    current_dag = args[3]
+                    current_dag = parse_args(args,3)
             elif proctitle.startswith(PROCTITLE_TASK_RUNNER_PREFIX): 
                 args = proctitle[len(PROCTITLE_TASK_RUNNER_PREFIX):].split(" ")
                 if len(args) > 0:         
-                    current_dag = args[0]
+                    current_dag = parse_args(args,0)
             elif proctitle.startswith(PROCTITLE_NEW_PYTHON_INTERPRETER): # core.execute_tasks_new_python_interpreter = True
                 args = proctitle[len(PROCTITLE_NEW_PYTHON_INTERPRETER):].split(" ")
                 if len(args) > 0:         
-                    current_dag = args[4]
+                    current_dag = parse_args(args,4)
     except Exception as e:
-        print("DAG Parse Exception:",e)
+        print("Error determining DAG ID:",e)
     
     return current_dag
 
