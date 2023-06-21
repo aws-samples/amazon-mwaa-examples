@@ -19,6 +19,20 @@ particular table row if it is being called from a task, otherwise it skips that 
 only creates the DAG itself if it is part of the Scheduler processing loop (`current_dag = None`) or
 if the DAG has the same ID as the one currently being processed.
 
+For MWAA, you can also use this code to avoid parsing files when triggered via CLI on the web server:
+
+```
+import os
+from get_dag_id import GetCurrentDag
+
+current_dag = GetCurrentDag()
+container_name=os.getenv("MWAA_AIRFLOW_COMPONENT")
+this_dag_file=["dag_id_defined_in_this_code","another_dag_id_in_this_code]
+
+if not current_dag in this_dag_file and container_name=="webserver":
+    raise ImportError()
+```
+
 ### Files
 
 * [2.2/get_dag_id.py](2.2/get_dag_id.py)
