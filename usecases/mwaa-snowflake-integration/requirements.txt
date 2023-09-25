@@ -1,0 +1,9 @@
+--constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.5.1/constraints-3.10.txt"
+apache-airflow[package-extra]==2.5.1
+psycopg2
+fsspec
+s3fs
+pandas
+snowflake-connector-python
+apache-airflow-providers-snowflake
+snowflake-sqlalchemy
