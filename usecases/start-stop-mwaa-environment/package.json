@@ -5,7 +5,7 @@
     "mwaa-pause-resume": "bin/mwaa-pause-resume.js"
   },
   "scripts": {
-    "postinstall": "(cd lib/lambda && npm install) && husky install",
+    "postinstall": "(cd lib/lambda && npm install) && (cd ../../../.. && husky install usecases/start-stop-mwaa-environment/lib/lambda)",
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest --coverage --silent",
