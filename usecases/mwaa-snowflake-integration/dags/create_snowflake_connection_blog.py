@@ -63,7 +63,7 @@ with DAG(
         default_args=default_args,
         dagrun_timeout=timedelta(hours=2),
         start_date=days_ago(1),
-        tags=['Snowflake','Citibike', 'DAG2'],
+        tags=['Snowflake','Citibike', 'DAG1'],
         schedule_interval=None
 ) as dag:
     add_connection: PythonOperator = PythonOperator(
