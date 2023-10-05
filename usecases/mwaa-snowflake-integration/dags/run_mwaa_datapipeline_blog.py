@@ -161,7 +161,7 @@ with DAG(
         target_arn=target_sns_arn,
         subject='Top start stations',
         message="{{ task_instance.xcom_pull('top_start_stations', key='return_value')}}",
-        aws_conn_id="aws_connection"
+        aws_conn_id="aws_default"
   )
 
   snsTask2 = SnsPublishOperator(
@@ -169,7 +169,7 @@ with DAG(
         target_arn=target_sns_arn,
         subject='Top destination stations',
         message="{{ task_instance.xcom_pull('top_destination_stations', key='return_value')}}",
-        aws_conn_id="aws_connection"
+        aws_conn_id="aws_default"
   )
 
   createView >> topStationsStart >> topStationsDestination >> snsTask1 >> snsTask2 >> end

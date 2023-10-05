@@ -29,7 +29,7 @@ DEFAULT_ARGS = {
 with DAG(
     dag_id=os.path.basename(__file__).replace(".py", ""),
     default_args=DEFAULT_ARGS,
-    tags=['Snowflake','Citibike','DAG1'],
+    tags=['Snowflake','Citibike','DAG2'],
     schedule_interval=None
 ) as dag:
 
