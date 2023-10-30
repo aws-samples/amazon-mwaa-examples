@@ -1,8 +1,8 @@
 # Using deferrable operators in Amazon Managed Workflows for Apache Airflow
 
-Using deferrable operators in Amazon MWAA is simple. It involves using:
+Using deferrable operators in Amazon MWAA requires the following:
 
-1. An Amazon MWAA environment running Apache Airflow version v2.6.3 or greater, and
+1. An Amazon MWAA environment running Apache Airflow version v2.7.2 or greater, and
 2. A deferrable version of an operator or sensor in your DAG’s tasks. AWS deferrable operators expose a `deferrable` parameter. By default, `deferrable` is set to `False`, set this to `True` to run the operator in asynchronous mode. Apache Airflow Providers for Amazon v8.3.0 added deferrable modes to many of the AWS operators like Amazon Athena, Amazon EMR, and AWS Glue.
 
 Follow the steps below to understand how deferrable operators work together. You will be building and orchestrating the following data pipeline:
