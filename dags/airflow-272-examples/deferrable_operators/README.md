@@ -78,7 +78,7 @@ During this time, worker slots are not being used by the task for poking/polling
 
 ### Versions Supported
 
-Apache Airflow 2.6.3 on Amazon MWAA.
+Apache Airflow 2.7.2 on Amazon MWAA.
 
 ### Files
 
