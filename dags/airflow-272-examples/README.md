@@ -1,8 +1,8 @@
-## Amazon Managed Workflows for Apache Airflow (Amazon MWAA) using Apache Airflow 2.7.2 Examples
+## Examples for Amazon Managed Workflows for Apache Airflow (Amazon MWAA) using Apache Airflow 2.7.2
 
 The examples in this directory demonstrate how to use the following new features of Apache Airflow 2.7.2 in an Amazon MWAA environment:
- -  Deferrable operators
- - Setup and Teardown tasks
+ - [Deferrable operators](./deferrable_operators/README.md)
+ - [Setup and Teardown tasks](./setup_teardown_tasks/README.md)
 
 ### Blog
 This code is intended to support the AWS blog post "Introducing Amazon MWAA support for Apache Airflow version 2.7.2 and deferrable operators"
@@ -20,12 +20,12 @@ None
 None
 
 ### Explanation
-Each of the folders has necessary explanations of the DAG code used to implement the feature.
+For easier readability, the respective DAG file code has inline comments to help with explanation.
 
 ## Security
 
-See [CONTRIBUTING](../blob/main/CONTRIBUTING.md#security-issue-notifications) for more information.
+See [CONTRIBUTING](https://github.com/aws-samples/amazon-mwaa-examples/blob/main/CONTRIBUTING.md) for more information.
 
 ## License
 
-This library is licensed under the MIT-0 License. See the [LICENSE](../blob/main/LICENSE) file.
+This library is licensed under the MIT-0 License. See the [LICENSE](https://github.com/aws-samples/amazon-mwaa-examples/blob/main/LICENSE) file.
