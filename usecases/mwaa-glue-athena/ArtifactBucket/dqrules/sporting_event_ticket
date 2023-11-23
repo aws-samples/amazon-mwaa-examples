@@ -1,0 +1,5 @@
+Rules = [
+        IsComplete "sport_location_id",
+        IsComplete "sporting_event_id",
+        ColumnValues  "ticket_price" > 0
+]
