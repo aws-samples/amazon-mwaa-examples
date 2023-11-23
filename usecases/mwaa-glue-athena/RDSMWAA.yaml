@@ -462,6 +462,7 @@ Resources:
 
           - Effect: Allow
             Action:
+              - "glue:*"
               - "athena:*"
               - "s3:*"
               - "logs:*"
