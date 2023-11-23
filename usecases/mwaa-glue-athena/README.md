@@ -19,7 +19,8 @@ Note: Please run this tutorial in an account and region where AWS Lake Formation
 ### Clean up
 
 1. Empty content from both s3 bucket - mwaaenvironment  and artifact
-2. Delete CloudFormation template
+   
+2. Delete CloudFormation stack
 
 
 ### Resources
