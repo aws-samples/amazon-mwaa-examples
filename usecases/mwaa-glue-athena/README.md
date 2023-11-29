@@ -32,4 +32,5 @@ Note: Please run this tutorial in an account and region where AWS Lake Formation
 - Glue Docs: https://docs.aws.amazon.com/glue/latest/dg/how-it-works.html 
 - Athena Docs: https://docs.aws.amazon.com/athena/latest/ug/what-is.html 
 - MWAA at Scale: https://s12d.com/MWAAatScale 
-- Airflow at Scale: https://s12d.com/AirflowAtScale 
+- Airflow at Scale: https://s12d.com/AirflowAtScale
+- Reducing Airflow Costs: https://s12d.com/ReducingAirflowCosts
