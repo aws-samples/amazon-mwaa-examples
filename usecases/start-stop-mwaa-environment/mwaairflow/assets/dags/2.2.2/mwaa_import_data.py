@@ -126,7 +126,11 @@ def importVariable(**context):
         reader = csv.reader(csvfile)
         rows = []
         for row in reader:
-            rows.append(Variable(row[0], row[1]))
+            rowexist = session.query(Variable).filter(Variable.key==row[0]).all()
+            if (len(rowexist)==0):
+                rows.append(Variable(row[0], row[1]))
+            else:
+                print(f"Already Exists Varible {list(rowexist)}")
         if len(rows) > 0:
             session.add_all(rows)
     session.commit()
@@ -149,7 +153,7 @@ def importConnection(**context):
                 if(len(row[7]) > 0):
                     port = int(row[7])
                 rows.append(Connection(row[0], row[1],row[2], row[3],row[4],
-                             row[5],row[6], row[7],row[8]))
+                             row[5],row[6], port,row[8]))
 
         if len(rows) > 0:
             session.add_all(rows)

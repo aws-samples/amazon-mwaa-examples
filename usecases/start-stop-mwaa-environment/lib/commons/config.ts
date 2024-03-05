@@ -101,6 +101,9 @@ function convertToType<T>(field: string, originalValue: string): T {
     }
     return result as T;
   }
+  if(field=='CDK_DEFAULT_ACCOUNT') {
+    return originalValue as T;
+  }
 
   const numValue = toNumber(originalValue);
   return (isNumber(numValue) ? numValue : originalValue) as T;

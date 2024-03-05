@@ -1,0 +1,19 @@
+CREATE TABLE IF NOT EXISTS curated_db.sporting_event_info_agg
+as
+
+SELECT
+e.id AS event_id,
+e.sport_type_name AS sport,
+e.start_date_time AS event_date_time,
+h.name AS home_team,
+a.name AS away_team,
+l.name AS location,
+l.city
+FROM curated_db.sporting_event e,
+curated_db.sport_team h,
+curated_db.sport_team a,
+curated_db.sport_location l
+WHERE
+e.home_team_id = h.id
+AND e.away_team_id = a.id
+AND e.location_id = l.id;

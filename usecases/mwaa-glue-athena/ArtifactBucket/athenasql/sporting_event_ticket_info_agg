@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS curated_db.sporting_event_ticket_info_agg
+as
+
+SELECT t.id AS ticket_id,
+e.event_id,
+e.sport,
+e.event_date_time,
+e.home_team,
+e.away_team,
+e.location,
+e.city,
+t.seat_level,
+t.seat_section,
+t.seat_row,
+t.seat,
+t.ticket_price,
+p.full_name AS ticketholder
+FROM curated_db.sporting_event_info e,
+curated_db.sporting_event_ticket t,
+curated_db.person p
+WHERE
+t.sporting_event_id = e.event_id
+AND t.ticketholder_id = p.id
