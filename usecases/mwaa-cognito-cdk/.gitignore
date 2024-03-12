@@ -1,0 +1,16 @@
+# Files
+*.js
+!jest.config.js
+*.d.ts
+.cdk.staging
+package-lock.json
+test-report.xml
+
+# Folders
+cdk.out/
+coverage/
+node_modules/
+
+# Certificates
+cert.pem
+key.pem
