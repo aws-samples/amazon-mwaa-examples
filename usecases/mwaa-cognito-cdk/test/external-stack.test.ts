@@ -7,8 +7,8 @@ import { VpcStack } from "../lib/vpc-stack";
 describe("Execution unit tests for dev account", () => {
   // Generate Storage stack
   const stageName = "dev";
-  const sampleNumber="111111111111"
-  const sampleID="12345678-54de-4f0c-be44-43302a28ef9e"
+  const sampleNumber = "111111111111";
+  const sampleID = "12345678-54de-4f0c-be44-43302a28ef9e";
   const mockApp = new App();
   const vpcStack = new VpcStack(mockApp, "unittest-vpc", {
     stage: stageName,
