@@ -1,13 +1,14 @@
 import os
 
-from aws_cdk import aws_mwaa as mwaa, aws_iam as iam, core
+from aws_cdk import aws_mwaa as mwaa, aws_iam as iam, CfnJson, Stack
+from constructs import Construct
 from infra.s3_stack import S3Stack
 from infra.vpc_stack import VpcStack
 
 
-class MwaaStack(core.Stack):
+class MwaaStack(Stack):
     def __init__(
-        self, scope: core.Construct, id: str, vpc: VpcStack, s3: S3Stack, **kwargs
+        self, scope: Construct, id: str, vpc: VpcStack, s3: S3Stack, **kwargs
     ) -> None:
         super().__init__(scope, id, **kwargs)
 
@@ -94,7 +95,7 @@ class MwaaStack(core.Stack):
                 effect=iam.Effect.ALLOW,
             )
         )
-        string_like = core.CfnJson(
+        string_like = CfnJson(
             self,
             "ConditionJson",
             value={f"kms:ViaService": f"sqs.{self.region}.amazonaws.com"},

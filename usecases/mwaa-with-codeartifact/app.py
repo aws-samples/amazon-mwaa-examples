@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 import os
 
-from aws_cdk import core as cdk
-from aws_cdk import core
+import aws_cdk as cdk
 
 from infra.vpc_stack import VpcStack
 from infra.codeartifact_stack import CodeArtifactStack
@@ -11,8 +10,8 @@ from infra.s3_stack import S3Stack
 from infra.mwaa_stack import MwaaStack
 
 
-app = core.App()
-env = core.Environment(region=os.environ.get("AWS_REGION"))
+app = cdk.App()
+env = cdk.Environment(region=os.environ.get("AWS_REGION"))
 
 vpc = VpcStack(app, "VpcStack", env=env)
 ca = CodeArtifactStack(app, "CodeArtifactStack", env=env)
