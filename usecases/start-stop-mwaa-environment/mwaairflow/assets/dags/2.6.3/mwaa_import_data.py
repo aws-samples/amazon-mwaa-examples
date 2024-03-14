@@ -167,7 +167,7 @@ def importConnection(**context):
         for row in reader:
             rowexist = session.query(Connection).filter(Connection.conn_id==row[0]).all()
             if(len(rowexist) == 0):
-                port = None
+                port = 0
                 if(len(row[7]) > 0):
                     port = int(row[7])
                 rows.append(Connection(row[0], row[1],row[2], row[3],row[4],
