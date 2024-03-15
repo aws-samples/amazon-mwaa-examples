@@ -50,8 +50,8 @@ export class DagsCli {
   }
 
   async triggerDag(dagName: string, configuration?: Record<string, string>): Promise<DagsCliResult> {
-    const triggerResult = await this.execute(`dags trigger ${dagName}`, configuration);
-    if (!triggerResult.stdOut.includes('triggered: True')) {
+    const triggerResult = await this.execute(`dags trigger -o json ${dagName}`, configuration);
+    if (!triggerResult.stdOut.includes('"external_trigger": "True"')) {
       throw new Error(`Dag [${dagName}] trigger failed with the following error: ${JSON.stringify(triggerResult)}`);
     }
     return triggerResult;
