@@ -116,7 +116,7 @@ export class MwaaResumingStack extends MwaaPauseResumeBaseStack {
     const newEnvironmentFunc = new lambdajs.NodejsFunction(this, name, {
       entry: join(__dirname, '..', 'lambda', 'mwaa-new-environment-function.ts'),
       depsLockFilePath: join(__dirname, '..', 'lambda', 'package-lock.json'),
-      runtime: lambda.Runtime.NODEJS_14_X,
+      runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'handler',
       bundling: {
         sourceMap: true,

@@ -113,7 +113,7 @@ export class MwaaCommonStack extends MwaaBaseStack {
     const triggerFunc = new lambdajs.NodejsFunction(this, name, {
       entry: join(__dirname, '..', 'lambda', 'dags-trigger-function.ts'),
       depsLockFilePath: join(__dirname, '..', 'lambda', 'package-lock.json'),
-      runtime: lambda.Runtime.NODEJS_14_X,
+      runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'handler',
       bundling: {
         sourceMap: true,
@@ -125,6 +125,7 @@ export class MwaaCommonStack extends MwaaBaseStack {
       timeout: cdk.Duration.minutes(10),
       environment: {
         MWAA_ENV_NAME: props.environmentName,
+        MWAA_ENV_VERSION: props.environmentVersion,
         NODE_OPTIONS: '--enable-source-maps',
       },
     });
