@@ -26,7 +26,7 @@ export interface DagsCliResult {
 export class DagsCli {
   protected token: mwaa.CreateCliTokenCommandOutput;
 
-  constructor(private environmentName: string, private client = new mwaa.MWAAClient({})) {}
+  constructor(private environmentName: string, private environmentVersion: string, private client = new mwaa.MWAAClient({})) {}
 
   async setup(): Promise<mwaa.CreateCliTokenCommandOutput> {
     if (!this.environmentName) {
@@ -50,8 +50,20 @@ export class DagsCli {
   }
 
   async triggerDag(dagName: string, configuration?: Record<string, string>): Promise<DagsCliResult> {
-    const triggerResult = await this.execute(`dags trigger ${dagName}`, configuration);
-    if (!triggerResult.stdOut.includes('triggered: True')) {
+    const semVer = this.environmentVersion.split('.');
+
+    let command = '';
+    let resultIncludes = '';
+    if (+semVer[0] <= 2 && +semVer[1] <= 5) {
+      command = `dags trigger ${dagName}`;
+      resultIncludes = 'triggered: True';
+    } else {
+      command = `dags trigger -o json ${dagName}`;
+      resultIncludes = '"external_trigger": "True"';
+    }
+
+    const triggerResult = await this.execute(command, configuration);
+    if (!triggerResult.stdOut.includes(resultIncludes)) {
       throw new Error(`Dag [${dagName}] trigger failed with the following error: ${JSON.stringify(triggerResult)}`);
     }
     return triggerResult;
