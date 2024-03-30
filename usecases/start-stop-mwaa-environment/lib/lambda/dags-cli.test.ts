@@ -27,13 +27,13 @@ describe('DagsCli', () => {
   describe('Construction', () => {
     it('should set environmentName and mwaa sdk client', () => {
       const client = new MWAAClient({});
-      const cli = new DagsCli('my-env', client);
+      const cli = new DagsCli('my-env', '2.6.3', client);
       expect(cli['environmentName']).toEqual('my-env');
       expect(cli['client']).toBe(client);
     });
 
     it('should set up default mwaa sdk client if missing', () => {
-      const cli = new DagsCli('my-env');
+      const cli = new DagsCli('my-env', '2.6.3');
       expect(cli['environmentName']).toEqual('my-env');
       expect(cli['client']).toBeTruthy();
     });
@@ -56,7 +56,7 @@ describe('DagsCli', () => {
 
     describe('setup', () => {
       it('should fail if the environment name is missing', async () => {
-        const cli = new DagsCli('');
+        const cli = new DagsCli('', '2.5.1');
 
         expect.assertions(1);
 
@@ -68,7 +68,7 @@ describe('DagsCli', () => {
       });
 
       it('should get the cli token if not cached', async () => {
-        const cli = new DagsCli('my-env');
+        const cli = new DagsCli('my-env', '2.6.3');
         const result = await cli.setup();
 
         expect(result).toEqual(token);
@@ -76,7 +76,7 @@ describe('DagsCli', () => {
       });
 
       it('should use the cached cli token if available', async () => {
-        const cli = new DagsCli('my-env');
+        const cli = new DagsCli('my-env', '2.6.3');
         const result1 = await cli.setup();
         const result2 = await cli.setup();
 
@@ -98,7 +98,7 @@ describe('DagsCli', () => {
             stdout: Buffer.from(stdOut).toString('base64'),
           });
 
-        const cli = new DagsCli('my-env');
+        const cli = new DagsCli('my-env', '2.6.3');
         const result = await cli.execute('dags trigger', { key: 'value' });
 
         expect(result).toEqual({ stdOut, stdError });
@@ -115,7 +115,7 @@ describe('DagsCli', () => {
             stdout: Buffer.from(stdOut).toString('base64'),
           });
 
-        const cli = new DagsCli('my-env');
+        const cli = new DagsCli('my-env', '2.6.3');
         const result = await cli.execute('dags trigger');
 
         expect(result).toEqual({ stdOut, stdError });
@@ -124,7 +124,7 @@ describe('DagsCli', () => {
       it('should throw an error if std out is missing', async () => {
         nock('https://mwaa.com').post('/aws_mwaa/cli', 'dags trigger').reply(200, {});
 
-        const cli = new DagsCli('my-env');
+        const cli = new DagsCli('my-env', '2.6.3');
 
         try {
           await cli.execute('dags trigger');
@@ -140,7 +140,7 @@ describe('DagsCli', () => {
       });
 
       it('should execute the dags unpause cli command', async () => {
-        const cli = new DagsCli('my-env');
+        const cli = new DagsCli('my-env', '2.6.3');
         const expectedResult = {
           stdOut: 'Command output <paused: False> more output',
           stdError: '',
@@ -153,7 +153,7 @@ describe('DagsCli', () => {
       });
 
       it('should throw an error if the supplied dag was not unpaused', async () => {
-        const cli = new DagsCli('my-env');
+        const cli = new DagsCli('my-env', '2.6.3');
         const expectedResult = {
           stdOut: 'Command output <paused: True> more output',
           stdError: '',
@@ -175,8 +175,8 @@ describe('DagsCli', () => {
         jest.resetAllMocks();
       });
 
-      it('should execute the dags trigger cli command', async () => {
-        const cli = new DagsCli('my-env');
+      it('should execute the dags trigger cli command for 2.5 version or lower', async () => {
+        const cli = new DagsCli('my-env', '2.5.1');
         const expectedResult = {
           stdOut: 'Command output <triggered: True> more output',
           stdError: 'some text',
@@ -188,8 +188,22 @@ describe('DagsCli', () => {
         expect(result).toEqual(expectedResult);
       });
 
+      it('should execute the dags trigger cli command for 2.6 version or higher', async () => {
+        const cli = new DagsCli('my-env', '2.6.3');
+        const expectedResult = {
+          stdOut: '"external_trigger": "True"',
+          stdError: 'some text',
+        };
+
+        jest.spyOn(cli, 'execute').mockResolvedValue(expectedResult);
+
+        const result = await cli.triggerDag('my-dag');
+        expect(result).toEqual(expectedResult);
+      });
+
+
       it('should throw an error if the supplied dag was not triggered', async () => {
-        const cli = new DagsCli('my-env');
+        const cli = new DagsCli('my-env', '2.6.3');
         const expectedResult = {
           stdOut: 'Command output <triggered: False> more output',
           stdError: 'some text',
