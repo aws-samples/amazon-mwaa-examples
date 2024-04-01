@@ -194,6 +194,13 @@ export class MwaaResumingStack extends MwaaPauseResumeBaseStack {
         resources: ['*'],
       })
     );
+    newEnvironmentFunc.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['iam:PassRole'],
+        resources: ['*'],
+      })
+    );
 
     return newEnvironmentFunc;
   }
