@@ -18,10 +18,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import { DagsCliResult, DagsCli } from './dags-cli';
 
 const envName = process.env.MWAA_ENV_NAME || '';
+const envVersion = process.env.MWAA_ENV_VERSION || '';
 
 export const handler = async (event: Record<string, unknown>): Promise<DagsCliResult> => {
   console.info('Event', event);
-  const dagsCli = new DagsCli(envName);
+  const dagsCli = new DagsCli(envName, envVersion);
 
   const taskToken = event['taskToken'] as string;
   const dag = event['dag'] as string;
