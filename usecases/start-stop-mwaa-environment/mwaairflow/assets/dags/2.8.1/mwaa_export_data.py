@@ -65,7 +65,7 @@ TASK_FAIL_SELECT = "select task_id, dag_id, run_id, map_index, start_date, end_d
 JOB_SELECT = "select dag_id,  state, job_type , start_date, \
 end_date, latest_heartbeat, executor_class, hostname, unixname from job"
 
-POOL_SLOTS = "select pool, slots, description from slot_pool where pool != 'default_pool'"
+POOL_SLOTS = "select pool, slots, description, include_deferred from slot_pool where pool != 'default_pool'"
 DATASET = "select uri, extra, created_at, updated_at from dataset"
 DATASET_QUEUE = "select dataset_id, target_dag_id,  created_at  from dataset_dag_run_queue"
 DATASET_EVENT = "select dataset_id, extra, source_task_id, source_dag_id, source_run_id,source_map_index,timestamp from dataset_event"
@@ -98,6 +98,7 @@ OBJECTS_TO_EXPORT = [
     [DATASET_QUEUE, "dataset_dag_run_queue"],
     [DAGRUN_DATASET_EVENT, "dagrun_dataset_event"],
     [TRIGGER, "trigger"],
+    [POOL_SLOTS, "slot_pool"]
 ]
 
 

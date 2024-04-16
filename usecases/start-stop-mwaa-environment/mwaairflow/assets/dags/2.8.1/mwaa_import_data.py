@@ -60,7 +60,7 @@ JOB_IMPORT = "COPY JOB(dag_id,  state, job_type , start_date, \
 
 
 LOG_IMPORT = "COPY log(dttm, dag_id, task_id, event, execution_date, owner, extra) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
-POOL_SLOTS = "COPY slot_pool(pool, slots, description) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
+POOL_SLOTS = "COPY slot_pool(pool, slots, description, include_deferred) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 DATASET = "COPY dataset(uri, extra, created_at, updated_at) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 DATASET_QUEUE = "COPY dataset_dag_run_queue(dataset_id, target_dag_id,  created_at) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 DATASET_EVENT = "COPY dataset_event(dataset_id, extra, source_task_id, source_dag_id, \
