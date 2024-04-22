@@ -1,9 +1,18 @@
-<!-- TOC ignore:true -->
 
+<!-- TOC ignore:true -->
 # Automate Stopping and Starting an Amazon MWAA Environment
 
-<!-- TOC ignore:true -->
+![typescript](https://img.shields.io/badge/cdk-typescript-blue)
+[![code style: eslint](https://img.shields.io/badge/code%20style-eslint-darkgreen.svg)](https://github.com/psf/black)
+![2.0.2](https://img.shields.io/badge/mwaa-v2.0.2-green)
+![2.2.2](https://img.shields.io/badge/mwaa-v2.2.2-green)
+![2.4.3](https://img.shields.io/badge/mwaa-v2.4.3-green)
+![2.5.1](https://img.shields.io/badge/mwaa-v2.5.1-green)
+![2.6.3](https://img.shields.io/badge/mwaa-v2.6.3-green)
+![2.7.2](https://img.shields.io/badge/mwaa-v2.7.2-green)
+![2.8.1](https://img.shields.io/badge/mwaa-v2.8.1-green)
 
+<!-- TOC ignore:true -->
 # Contents
 
 <!-- TOC -->
@@ -11,32 +20,32 @@
 - [Introduction](#introduction)
 - [Getting Started](#getting-started)
 - [Architecture](#architecture)
-  - [Deployment Architecture](#deployment-architecture)
-    - [The Original MWAA Stack](#the-original-mwaa-stack)
-    - [The Common Nested Stack](#the-common-nested-stack)
-    - [The Polling Nested Stack](#the-polling-nested-stack)
-    - [The Pausing Nested Stack](#the-pausing-nested-stack)
-    - [The Resuming Nested Stack](#the-resuming-nested-stack)
-    - [The Notification Nested Stack](#the-notification-nested-stack)
-  - [Execution Architecture](#execution-architecture)
+    - [Deployment Architecture](#deployment-architecture)
+        - [The Original MWAA Stack](#the-original-mwaa-stack)
+        - [The Common Nested Stack](#the-common-nested-stack)
+        - [The Polling Nested Stack](#the-polling-nested-stack)
+        - [The Pausing Nested Stack](#the-pausing-nested-stack)
+        - [The Resuming Nested Stack](#the-resuming-nested-stack)
+        - [The Notification Nested Stack](#the-notification-nested-stack)
+    - [Execution Architecture](#execution-architecture)
 - [Prerequisites](#prerequisites)
 - [Stack Parameters](#stack-parameters)
-  - [Automated Update to the MWAA IAM Role](#automated-update-to-the-mwaa-iam-role)
-  - [Automated Update to the VPC Security Group](#automated-update-to-the-vpc-security-group)
+    - [Automated Update to the MWAA IAM Role](#automated-update-to-the-mwaa-iam-role)
+    - [Automated Update to the VPC Security Group](#automated-update-to-the-vpc-security-group)
 - [Building and Deploying the Project](#building-and-deploying-the-project)
-  - [Cloning the Repository](#cloning-the-repository)
-  - [Setting up Environment Variables](#setting-up-environment-variables)
-    - [Create a .env file](#create-a-env-file)
-    - [Export the variables in your shell](#export-the-variables-in-your-shell)
-  - [Configuring Python Modules for MWAA](#configuring-python-modules-for-mwaa)
-  - [Building the Project](#building-the-project)
-  - [Deploying the Project](#deploying-the-project)
-    - [Bootstrapping your Account](#bootstrapping-your-account)
-    - [Launching the Stack](#launching-the-stack)
+    - [Cloning the Repository](#cloning-the-repository)
+    - [Setting up Environment Variables](#setting-up-environment-variables)
+        - [Create a .env file](#create-a-env-file)
+        - [Export the variables in your shell](#export-the-variables-in-your-shell)
+    - [Configuring Python Modules for MWAA](#configuring-python-modules-for-mwaa)
+    - [Building the Project](#building-the-project)
+    - [Deploying the Project](#deploying-the-project)
+        - [Bootstrapping your Account](#bootstrapping-your-account)
+        - [Launching the Stack](#launching-the-stack)
 - [Limitations and Workarounds](#limitations-and-workarounds)
-  - [Pausing While Active](#pausing-while-active)
-  - [Stopping and Starting Multiple MWAA Environments](#stopping-and-starting-multiple-mwaa-environments)
-  - [Not All MetaData Tables are Backed Up](#not-all-metadata-tables-are-backed-up)
+    - [Pausing While Active](#pausing-while-active)
+    - [Stopping and Starting Multiple MWAA Environments](#stopping-and-starting-multiple-mwaa-environments)
+    - [Not All MetaData Tables are Backed Up](#not-all-metadata-tables-are-backed-up)
 
 <!-- /TOC -->
 
@@ -177,7 +186,7 @@ The stack parameters are externalized as environment variables. Here are the par
 | `CDK_DEFAULT_REGION`            | None                                                           | `us-east-1`                                                                  | Your AWS region where MWAA is deployed.                                                                                                                                                  |
 | `MWAA_MAIN_STACK_NAME`          | None                                                           | `mwaa-pause-resume-dev`, `mwaa-pause-resume-stage`, `mwaa-pause-resume-prod` | The name of the top-level stack. If you need to pause and resume multiple MWAA environments, then you can redeploy this project with different stack names to manage those environments. |
 | `MWAA_ENV_NAME`                 | None                                                           | `my-mwaa-env`                                                                | Name of the deployed MWAA environment -- [Check AWS Console](https://console.aws.amazon.com/mwaa/home#environments).                                                                     |
-| `MWAA_ENV_VERSION`              | None                                                           | `2.5.1`, `2.4.3`, `2.2.2`, `2.0.2`                                           | Version of the deployed MWAA environment -- [Check AWS Console](https://console.aws.amazon.com/mwaa/home#environments).                                                                  |
+| `MWAA_ENV_VERSION`              | None                                                           | `2.8.1`, `2.7.2`, `2.6.3`, `2.5.1`, `2.4.3`, `2.2.2`, `2.0.2`  | Version of the deployed MWAA environment -- [Check AWS Console](https://console.aws.amazon.com/mwaa/home#environments).                                                                  |
 | `MWAA_SOURCE_BUCKET_NAME`       | None                                                           | `my-mwaa-env-bucket`                                                         | Name of the S3 bucket for the environment that hosts DAGs. Check the environment details page on [AWS Console](https://console.aws.amazon.com/mwaa/home#environments).                   |
 | `MWAA_EXECUTION_ROLE_ARN`       | None                                                           | `arn:aws:iam:...`                                                            | ARN of the execution role for your MWAA environment. Check the environment details page on [AWS Console](https://console.aws.amazon.com/mwaa/home#environments).                         |
 | `MWAA_UPDATE_EXECUTION_ROLE`    | None                                                           | `yes` or `no`                                                                | Flag to denote whether to update the existing MWAA execution role with new policies for allowing task token return calls to the pause and resume StepFunctions                           |

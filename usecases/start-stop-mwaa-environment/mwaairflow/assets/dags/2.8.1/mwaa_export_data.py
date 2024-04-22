@@ -46,7 +46,7 @@ DAG_RUN_SELECT = f"select dag_id, clear_number, execution_date, state, run_id, e
 dag_hash, creating_job_id, queued_at, data_interval_start, data_interval_end, log_template_id, \
 updated_at from dag_run where dag_id <> '{dag_id}' or state <> '{STATE_RUNNING}' \
 UNION \
-select dag_id, execution_date, '{STATE_SUCCESS}' as state, run_id, external_trigger, \
+select dag_id, clear_number, execution_date, '{STATE_SUCCESS}' as state, run_id, external_trigger, \
 '\\x' || encode(conf,'hex') as conf, '{days_ago(0)}'::timestamp as end_date, start_date, run_type, last_scheduling_decision, \
 dag_hash, creating_job_id, queued_at, data_interval_start, data_interval_end, log_template_id, \
 updated_at from dag_run where dag_id = '{dag_id}' and state = '{STATE_RUNNING}' "
