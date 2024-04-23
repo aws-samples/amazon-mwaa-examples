@@ -58,7 +58,7 @@ pool_slots, queued_by_job_id, external_executor_id, trigger_id ,\
 trigger_timeout, next_method, next_kwargs, map_index, updated_at from task_instance \
 where state NOT IN ('running','restarting','queued','scheduled', 'up_for_retry','up_for_reschedule')"
 
-LOG_SELECT = "select dttm, dag_id, task_id, event, execution_date, owner, extra from log"
+LOG_SELECT = "select dttm, dag_id, task_id, event, execution_date, owner, owner_display_name, extra from log"
 
 TASK_FAIL_SELECT = "select task_id, dag_id, run_id, map_index, start_date, end_date, duration from task_fail"
 
