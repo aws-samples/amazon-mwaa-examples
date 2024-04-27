@@ -34,6 +34,8 @@ export const SFN_DEFAULT_POLL_FREQUENCY_SECS = 60;
 
 export const MWAA_DEFAULT_NOTIFICATION_TYPES = ['FAILED', 'TIMED_OUT', 'ABORTED'];
 
+export const MWAA_DEFAULT_UPDATE_AFTER_RESTORE = 'no';
+
 export type Config = MwaaMainStackProps;
 
 function configuration(): Config {
@@ -68,6 +70,8 @@ function configuration(): Config {
     pauseTimeoutMins: envOrDefault('SFN_PAUSE_TIMEOUT_MINS', SFN_DEFAULT_PAUSE_TIMEOUT_MINS),
     resumeTimoutMins: envOrDefault('SFN_RESUME_TIMEOUT_MINS', SFN_DEFAULT_RESUME_TIMEOUT_MINS),
     pollFrequencySeconds: envOrDefault('SFN_POLL_FREQUENCY_SECS', SFN_DEFAULT_POLL_FREQUENCY_SECS),
+
+    updateAfterRestore: envOrDefault('MWAA_UPDATE_AFTER_RESTORE', MWAA_DEFAULT_UPDATE_AFTER_RESTORE)
   };
 }
 
@@ -101,7 +105,8 @@ function convertToType<T>(field: string, originalValue: string): T {
     }
     return result as T;
   }
-  if(field=='CDK_DEFAULT_ACCOUNT') {
+
+  if (field === 'CDK_DEFAULT_ACCOUNT') {
     return originalValue as T;
   }
 

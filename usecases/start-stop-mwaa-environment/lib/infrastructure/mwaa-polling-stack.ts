@@ -88,7 +88,7 @@ export class MwaaPollingStack extends MwaaBaseStack {
     const definition = waitState.next(pollerState).next(statusCheckState);
 
     const stateMachine = new sfn.StateMachine(this, name, {
-      definition,
+      definitionBody: sfn.DefinitionBody.fromChainable(definition),
       timeout: cdk.Duration.minutes(props.pollTimeoutMins),
     });
 

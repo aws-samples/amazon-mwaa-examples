@@ -43,6 +43,7 @@ export interface MwaaPauseResumeStackProps extends cdk.StackProps {
   backupBucket?: s3.IBucket;
   pollingStateMachine?: sfn.StateMachine;
   dagTriggerFunction?: lambdajs.NodejsFunction;
+  updateAfterRestore: string;
 }
 
 export interface DagTriggerStateInput {

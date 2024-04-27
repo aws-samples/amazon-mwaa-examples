@@ -39,18 +39,30 @@ interface GetObjectStateInput {
   key: string;
 }
 
+interface UpdateEnvironmentInput {
+  stateName: string;
+  environmentName: string;
+  account: string;
+  region: string;
+}
+
+
 export class MwaaResumingStack extends MwaaPauseResumeBaseStack {
   readonly newEnvironmentFunction: lambdajs.NodejsFunction;
+  readonly updateEnvironmentFunction?: lambdajs.NodejsFunction;
   readonly stateMachine: sfn.StateMachine;
 
   constructor(scope: construct.Construct, id: string, props: MwaaPauseResumeStackProps) {
     super(scope, id, props);
     this.newEnvironmentFunction = this.createNewEnvironmentFunction(props);
-    this.stateMachine = this.createStateMachine(props, this.newEnvironmentFunction);
+    if (props.updateAfterRestore == 'yes') {
+      this.updateEnvironmentFunction = this.createUpdateEnvironmentFunction(props);
+    }
+    this.stateMachine = this.createStateMachine(props, this.newEnvironmentFunction, this.updateEnvironmentFunction);
     this.createSchedule(props.resumeCronSchedule, props.scheduleTimeZone, this.stateMachine);
   }
 
-  createStateMachine(props: MwaaPauseResumeStackProps, newEnvFunction: lambdajs.NodejsFunction): sfn.StateMachine {
+  createStateMachine(props: MwaaPauseResumeStackProps, newEnvFunction: lambdajs.NodejsFunction, updateEnvFunction?: lambdajs.NodejsFunction): sfn.StateMachine {
     const name = this.getName('resuming-sfn');
 
     const retrieveEnvironmentInput: GetObjectStateInput = {
@@ -72,13 +84,24 @@ export class MwaaResumingStack extends MwaaPauseResumeBaseStack {
       dagTriggerFunction: props.dagTriggerFunction!,
     };
 
-    const definition = this.createS3GetObjectState(retrieveEnvironmentInput)
+    const updateEnvironmentInput: UpdateEnvironmentInput = {
+      stateName: 'Update Environment',
+      environmentName: props.environmentName,
+      account: props.account,
+      region: props.region,
+    };
+
+    let definition = this.createS3GetObjectState(retrieveEnvironmentInput)
       .next(this.createNewEnvironmentState(newEnvFunction))
       .next(this.creatEnvironmentPollerState(envPollerInput))
       .next(this.createDagTriggerState(dagTriggerInput));
 
+    if (props.updateAfterRestore === 'yes') {
+      definition = definition.next(this.createUpdateEnvironmentState(props, updateEnvFunction!));
+    }
+
     const stateMachine = new sfn.StateMachine(this, name, {
-      definition,
+      definitionBody: sfn.DefinitionBody.fromChainable(definition),
       timeout: cdk.Duration.minutes(props.resumeTimoutMins),
     });
 
@@ -203,5 +226,110 @@ export class MwaaResumingStack extends MwaaPauseResumeBaseStack {
     );
 
     return newEnvironmentFunc;
+  }
+
+
+  createUpdateEnvironmentState(props: MwaaPauseResumeStackProps, updateEnvFunc: lambdajs.NodejsFunction): sfn.State {
+    const state = new tasks.LambdaInvoke(this, 'Update environment', {
+      lambdaFunction: updateEnvFunc,
+      payload: sfn.TaskInput.fromObject({
+        Name: props.environmentName
+      }),
+    });
+    return state;
+  }
+
+  createUpdateEnvironmentFunction(props: MwaaPauseResumeStackProps): lambdajs.NodejsFunction {
+    const name = this.getName('update-environment-fn');
+    const updateEnvironmentFunc = new lambdajs.NodejsFunction(this, name, {
+      entry: join(__dirname, '..', 'lambda', 'mwaa-update-environment-function.ts'),
+      depsLockFilePath: join(__dirname, '..', 'lambda', 'package-lock.json'),
+      runtime: lambda.Runtime.NODEJS_18_X,
+      handler: 'handler',
+      bundling: {
+        sourceMap: true,
+        target: 'ES2021',
+        format: lambdajs.OutputFormat.CJS,
+        mainFields: ['module', 'main'],
+      },
+      timeout: cdk.Duration.minutes(10),
+      environment: {
+        NODE_OPTIONS: '--enable-source-maps',
+      },
+    });
+
+    updateEnvironmentFunc.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        resources: [`arn:aws:airflow:${props.region}:${props.account}:environment/${props.environmentName}`],
+        actions: ['airflow:UpdateEnvironment'],
+      })
+    );
+    updateEnvironmentFunc.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        resources: [props.sourceBucket!.bucketArn],
+        actions: ['s3:GetEncryptionConfiguration'],
+      })
+    );
+    updateEnvironmentFunc.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['logs:CreateLogStream', 'logs:CreateLogGroup', 'logs:DescribeLogGroups'],
+        resources: ['arn:aws:logs:*:*:log-group:airflow-*:*'],
+      })
+    );
+    updateEnvironmentFunc.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          'ec2:AttachNetworkInterface',
+          'ec2:CreateNetworkInterface',
+          'ec2:CreateNetworkInterfacePermission',
+          'ec2:DescribeDhcpOptions',
+          'ec2:DescribeNetworkInterfaces',
+          'ec2:DescribeSecurityGroups',
+          'ec2:DescribeSubnets',
+          'ec2:DescribeVpcEndpoints',
+          'ec2:DescribeVpcs',
+        ],
+        resources: ['*'],
+      })
+    );
+    updateEnvironmentFunc.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['ec2:CreateVpcEndpoint', 'ec2:ModifyVpcEndpoint'],
+        resources: [
+          'arn:aws:ec2:*:*:vpc/*',
+          'arn:aws:ec2:*:*:vpc-endpoint/*',
+          'arn:aws:ec2:*:*:security-group/*',
+          'arn:aws:ec2:*:*:subnet/*',
+        ],
+      })
+    );
+    updateEnvironmentFunc.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['ec2:CreateTags'],
+        resources: ['arn:aws:ec2:*:*:vpc-endpoint/*'],
+      })
+    );
+    updateEnvironmentFunc.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['cloudwatch:PutMetricData'],
+        resources: ['*'],
+      })
+    );
+    updateEnvironmentFunc.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['iam:PassRole'],
+        resources: ['*'],
+      })
+    );
+
+    return updateEnvironmentFunc;
   }
 }
