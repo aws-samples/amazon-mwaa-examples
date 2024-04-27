@@ -39,14 +39,6 @@ interface GetObjectStateInput {
   key: string;
 }
 
-interface UpdateEnvironmentInput {
-  stateName: string;
-  environmentName: string;
-  account: string;
-  region: string;
-}
-
-
 export class MwaaResumingStack extends MwaaPauseResumeBaseStack {
   readonly newEnvironmentFunction: lambdajs.NodejsFunction;
   readonly updateEnvironmentFunction?: lambdajs.NodejsFunction;
@@ -82,13 +74,6 @@ export class MwaaResumingStack extends MwaaPauseResumeBaseStack {
       dagName: props.metadataImportDagName,
       bucketName: props.backupBucket!.bucketName,
       dagTriggerFunction: props.dagTriggerFunction!,
-    };
-
-    const updateEnvironmentInput: UpdateEnvironmentInput = {
-      stateName: 'Update Environment',
-      environmentName: props.environmentName,
-      account: props.account,
-      region: props.region,
     };
 
     let definition = this.createS3GetObjectState(retrieveEnvironmentInput)

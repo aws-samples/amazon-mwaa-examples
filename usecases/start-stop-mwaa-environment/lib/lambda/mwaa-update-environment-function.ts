@@ -25,6 +25,6 @@ export const handler = async (event: UpdateEnvironmentCommandInput): Promise<Upd
   const createEnvCommand = new UpdateEnvironmentCommand(event);
   const result = await client.send(createEnvCommand);
 
-  console.info('Create MWAA Environment Result', result);
+  console.info('Update MWAA Environment Result', result);
   return result;
 };
