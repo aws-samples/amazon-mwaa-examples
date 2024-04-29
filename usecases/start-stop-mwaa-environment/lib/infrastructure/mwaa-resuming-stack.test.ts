@@ -29,18 +29,41 @@ describe('MwaaResumingStack', () => {
   beforeEach(() => {
     prepareTestEnvironment();
     process.env.MWAA_UPDATE_EXECUTION_ROLE = 'yes';
-
-    config = configuration();
-    const app = new cdk.App();
-    const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', config);
-    resumingStack = mainStack.resumingStack;
   });
 
-  it('should define a scheduler, state machine, a new environment function', () => {
-    const template = Template.fromStack(resumingStack);
+  describe("when update after restore is enabled", () => {
+    beforeEach(() => {
+      process.env.MWAA_UPDATE_AFTER_RESTORE = 'yes';
+      config = configuration();
+      const app = new cdk.App();
+      const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', config);
+      resumingStack = mainStack.resumingStack;
+    });
 
-    template.resourceCountIs('AWS::Scheduler::Schedule', 1);
-    template.resourceCountIs('AWS::StepFunctions::StateMachine', 1);
-    template.resourceCountIs('AWS::Lambda::Function', 1);
+    it('should define a scheduler, state machine, a new env function, and an update env function', () => {
+      const template = Template.fromStack(resumingStack);
+
+      template.resourceCountIs('AWS::Scheduler::Schedule', 1);
+      template.resourceCountIs('AWS::StepFunctions::StateMachine', 1);
+      template.resourceCountIs('AWS::Lambda::Function', 2);
+    });
+  });
+
+  describe("when update after restore is disabled", () => {
+    beforeEach(() => {
+      process.env.MWAA_UPDATE_AFTER_RESTORE = 'no';
+      config = configuration();
+      const app = new cdk.App();
+      const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', config);
+      resumingStack = mainStack.resumingStack;
+    });
+
+    it('should define a scheduler, state machine, and a new env function', () => {
+      const template = Template.fromStack(resumingStack);
+
+      template.resourceCountIs('AWS::Scheduler::Schedule', 1);
+      template.resourceCountIs('AWS::StepFunctions::StateMachine', 1);
+      template.resourceCountIs('AWS::Lambda::Function', 1);
+    });
   });
 });

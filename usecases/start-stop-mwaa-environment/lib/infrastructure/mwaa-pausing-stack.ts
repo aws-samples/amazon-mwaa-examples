@@ -85,7 +85,7 @@ export class MwaaPausingStack extends MwaaPauseResumeBaseStack {
     );
 
     const stateMachine = new sfn.StateMachine(this, name, {
-      definition,
+      definitionBody: sfn.DefinitionBody.fromChainable(definition),
       timeout: cdk.Duration.minutes(props.pauseTimeoutMins),
     });
 
