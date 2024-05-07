@@ -25,6 +25,8 @@ from airflow.utils.task_group import TaskGroup
 import os
 import csv
 from airflow.models import Variable
+# use sleep to slow down CloudWatch queries and avoid throttling issues
+from time import sleep
 """
 This module imports data in to the table from the data exported by the export script
 This iterate through OBJECTS_TO_IMPORT which contains COPY statement and the csv file with data.
@@ -72,9 +74,7 @@ OBJECTS_TO_IMPORT = [
     [POOL_SLOTS, "slot_pool.csv"]
 ]
 
-# pause all dags before starting export
-
-
+# pause all dags before starting import
 def pause_dags():
     session = settings.Session()
     session.execute(
@@ -112,12 +112,13 @@ def activate_dags():
 
 # Gets distinct dag, task and execution date up to the days in TI_LOG_MAX_DAYS for failed state.
 # If you need all state, remove the condition from the query  
+# Exclude 'dag_id' (import_db) from the query as this does not typically exist in the source environment
 
 
 def getDagTasks():
     session = settings.Session()
     dagTasks = session.execute(f"select distinct ti.dag_id, ti.task_id, ti.run_id, ti.try_number, date(r.execution_date) as ed \
-        from task_instance ti, dag_run r where r.execution_date > current_date - {TI_LOG_MAX_DAYS} and \
+        from task_instance ti, dag_run r where ti.dag_id <> '{dag_id}' and r.execution_date > current_date - {TI_LOG_MAX_DAYS} and \
             ti.dag_id=r.dag_id and ti.run_id = r.run_id  and ti.state = 'failed' order by ti.dag_id, date(r.execution_date);").fetchall()
     return dagTasks
 
@@ -135,20 +136,28 @@ def create_logstreams():
     logGroupName = f"airflow-{NEW_ENV_NAME}-Task"
     logEventFieds = ['timestamp', 'message']
 
-    for row in dagTasks:
+    dagTasksCount = len(dagTasks)
+    print(f"Obtaining logs for {dagTasksCount} Log Groups")
+
+    for i,row in enumerate(dagTasks):
         prefix = row['dag_id']+"/"+row['task_id'] + \
             "/" + row["ed"].strftime('%Y-%m-%d')
         # prefix search logs
+        sleep(2)
+        print(f"Getting LogStreams #{i} of {dagTasksCount} - {prefix=}")
         streams = client.describe_log_streams(
             logGroupName=oldlogGroupName,
             logStreamNamePrefix=prefix,
         )
+        logStreamsCount = len(streams['logStreams'])
+        print(f"Obtaining events for {logStreamsCount} Log Streams")
 
-        for item in streams['logStreams']:
+        for streamNum,item in enumerate(streams['logStreams']):
             streamName = item["logStreamName"]
             runid = row['run_id'].replace(":","_")
             newStreamName = "dag_id="+row['dag_id']+"/run_id=" + runid + \
             "/task_id=" + row["task_id"] + "/attempt=" + str(row['try_number'])+".log"
+            print(f"Copying {streamName} to {newStreamName} - {streamNum} of {logStreamsCount}")
             try:
                 # Get log events from old environment max of 1MB
                 events = client.get_log_events(
@@ -158,11 +167,25 @@ def create_logstreams():
                 )
                 # Put log events in new environment
                 oldLogEvents = events["events"]
+                oldLogEventsCount = len(oldLogEvents)
                 if len(oldLogEvents) > 0:
-                    client.create_log_stream(
-                        logGroupName=logGroupName,
-                        logStreamName=newStreamName
-                    )
+                    print(f"Adding {oldLogEventsCount} to {newStreamName}")
+                    try:
+                        client.create_log_stream(
+                            logGroupName=logGroupName,
+                            logStreamName=newStreamName
+                        )
+                    except:
+                        print(f"{newStreamName} existed - recreating")
+                        client.delete_log_stream(
+                            logGroupName=logGroupName,
+                            logStreamName=newStreamName
+                        )
+                        client.create_log_stream(
+                            logGroupName=logGroupName,
+                            logStreamName=newStreamName
+                        )
+
                     eventsToInjest = []
                     for item in oldLogEvents:
                         newItem = {key: value for key,
@@ -181,8 +204,14 @@ def create_logstreams():
 
 # variables are imported separately as they are encyrpted
 def importVariable():
+    # If there were no variables in the source environment the variable.csv file may not exist
+    try:
+        tempfile = read_s3('variable.csv')
+    except:
+        print("variable.csv file not present or not accessible")
+        return
+    
     session = settings.Session()
-    tempfile = read_s3('variable.csv')
 
     with open(tempfile, 'r') as csvfile:
         reader = csv.reader(csvfile)
