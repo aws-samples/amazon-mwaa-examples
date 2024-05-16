@@ -50,7 +50,7 @@ class LambdaCronStack(core.Stack):
             code=lambda_.InlineCode(handler_code),
             handler="index.handler",
             timeout=core.Duration.seconds(300),
-            runtime=lambda_.Runtime.PYTHON_3_7,
+            runtime=lambda_.Runtime.PYTHON_3_9,
             environment={
                 "CA_DOMAIN": ca.repo.domain_name,
                 "CA_DOMAIN_OWNER": self.account,
