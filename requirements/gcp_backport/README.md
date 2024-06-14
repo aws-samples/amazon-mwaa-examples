@@ -28,7 +28,7 @@ apache-airflow-backport-providers-amazon[google]
 ```
 ## Security
 
-See [CONTRIBUTING](../../blob/main/CONTRIBUTING.md#security-issue-notifications) for more information.
+See [CONTRIBUTING](../../CONTRIBUTING.md#security-issue-notifications) for more information.
 
 ## License
 
