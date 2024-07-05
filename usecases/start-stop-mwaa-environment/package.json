@@ -29,9 +29,9 @@
     "@types/uuid": "9.0.8",
     "@typescript-eslint/eslint-plugin": "6.4.0",
     "@typescript-eslint/parser": "6.4.0",
-    "aws-cdk": "2.139.0",
-    "aws-sdk-client-mock": "4.0.0",
-    "aws-sdk-client-mock-jest": "4.0.0",
+    "aws-cdk": "2.147.3",
+    "aws-sdk-client-mock": "4.0.1",
+    "aws-sdk-client-mock-jest": "4.0.1",
     "esbuild": "0.20.2",
     "eslint": "8.56.0",
     "eslint-config-prettier": "9.1.0",
@@ -55,8 +55,8 @@
     "uuid": "9.0.1"
   },
   "dependencies": {
-    "@aws-sdk/client-mwaa": "3.556.0",
-    "aws-cdk-lib": "2.139.0",
+    "@aws-sdk/client-mwaa": "3.609.0",
+    "aws-cdk-lib": "2.147.3",
     "axios": "1.6.8",
     "constructs": "10.3.0",
     "dotenv": "16.4.5"

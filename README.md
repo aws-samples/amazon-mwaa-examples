@@ -21,6 +21,7 @@ This [folder](./usecases) contains complete set of sample use cases including do
 
 * [Image Processing Pipeline](usecases/image-processing)
 * [Amazon MWAA with AWS CodeArtifact for Python dependencies](usecases/mwaa-with-codeartifact)
+* [Stop and Start MWAA](usecases/start-stop-mwaa-environment/)
 
 ### Requirements.txt
 
