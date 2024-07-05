@@ -4,7 +4,7 @@
     "module": "CommonJs",
     "moduleResolution": "node",
     "lib": [
-      "ES2018"
+      "ESNext"
     ],
     "esModuleInterop": true,
     "skipLibCheck": true,
