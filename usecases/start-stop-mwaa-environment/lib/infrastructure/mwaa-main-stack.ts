@@ -31,6 +31,7 @@ export interface MwaaStackNameProps {
   vpcId: string;
   subnetIds: string[];
   securityGroups: string[];
+  createSfnVpce: string;
 }
 
 export interface MwaaVpc {
@@ -57,7 +58,7 @@ export class MwaaMainStack extends cdk.Stack {
   constructor(scope: construct.Construct, id: string, props: MwaaMainStackProps) {
     super(scope, id, props);
 
-    this.mwaaVpc = this.lookupVpc(props);
+    this.mwaaVpc = this.resolveVpcAndVpcEndpoint(props);
     props.mwaaVpc = this.mwaaVpc;
 
     this.commonStack = this.createCommonStack(props);
@@ -77,7 +78,7 @@ export class MwaaMainStack extends cdk.Stack {
     this.notificationStack = this.createNotificationStack(props);
   }
 
-  lookupVpc(props: MwaaMainStackProps): MwaaVpc {
+  resolveVpcAndVpcEndpoint(props: MwaaMainStackProps): MwaaVpc {
     if (props.vpcId) {
       const vpc = ec2.Vpc.fromLookup(this, `${props.mainStackName}-external-vpc`, {
         vpcId: props.vpcId,
@@ -88,17 +89,21 @@ export class MwaaMainStack extends cdk.Stack {
 
       const securityGroups = props.securityGroups.map((sg) => ec2.SecurityGroup.fromSecurityGroupId(this, sg, sg));
 
-      const vpce = vpc.addInterfaceEndpoint(`${props.mainStackName}-sf-vpce`, {
-        service: ec2.InterfaceVpcEndpointAwsService.STEP_FUNCTIONS,
-        subnets: vpcSubnets,
-        securityGroups: securityGroups,
-      });
+      let vpce: ec2.InterfaceVpcEndpoint | undefined = undefined;
+      if (props.createSfnVpce.toLowerCase() === 'yes') {
+        vpce =vpc.addInterfaceEndpoint(`${props.mainStackName}-sf-vpce`, {
+          service: ec2.InterfaceVpcEndpointAwsService.STEP_FUNCTIONS,
+          subnets: vpcSubnets,
+          securityGroups: securityGroups,
+        });
+      }
 
       return { vpc, vpcSubnets, securityGroups, vpce };
     }
 
     return {};
   }
+
 
   createCommonStack(props: MwaaMainStackProps): MwaaCommonStack {
     const commonStackName = 'mwaa-common-stack';

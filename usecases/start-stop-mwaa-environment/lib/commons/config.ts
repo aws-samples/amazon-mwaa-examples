@@ -35,6 +35,7 @@ export const SFN_DEFAULT_POLL_FREQUENCY_SECS = 60;
 export const MWAA_DEFAULT_NOTIFICATION_TYPES = ['FAILED', 'TIMED_OUT', 'ABORTED'];
 
 export const MWAA_DEFAULT_UPDATE_AFTER_RESTORE = 'no';
+export const MWAA_CREATE_SFN_VPCE = 'yes';
 
 export type Config = MwaaMainStackProps;
 
@@ -55,6 +56,7 @@ function configuration(): Config {
     vpcId: envOrDefault('MWAA_VPC_ID', ''),
     subnetIds: envOrDefault('MWAA_VPC_SUBNETS', []),
     securityGroups: envOrDefault('MWAA_VPC_SECURITY_GROUPS', []),
+    createSfnVpce: envOrDefault('MWAA_CREATE_SFN_VPCE', MWAA_CREATE_SFN_VPCE),
 
     dagsS3Path: envOrDefault('MWAA_DAGS_S3_PATH', MWAA_DEFAULT_DAGS_S3_PATH),
 
