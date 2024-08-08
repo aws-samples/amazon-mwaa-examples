@@ -247,7 +247,7 @@ export class MwaaResumingStack extends MwaaPauseResumeBaseStack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         resources: [`arn:aws:airflow:${props.region}:${props.account}:environment/${props.environmentName}`],
-        actions: ['airflow:UpdateEnvironment'],
+        actions: ['airflow:UpdateEnvironment', 'airflow:TagResource'],
       })
     );
     updateEnvironmentFunc.addToRolePolicy(
