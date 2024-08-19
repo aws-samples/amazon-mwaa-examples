@@ -36,7 +36,13 @@ describe('MwaaResumingStack', () => {
       process.env.MWAA_UPDATE_AFTER_RESTORE = 'yes';
       config = configuration();
       const app = new cdk.App();
-      const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', config);
+      const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', {
+        ...config,
+        env: {
+          account: config.account,
+          region: config.region,
+        },
+      });
       resumingStack = mainStack.resumingStack;
     });
 
@@ -54,7 +60,13 @@ describe('MwaaResumingStack', () => {
       process.env.MWAA_UPDATE_AFTER_RESTORE = 'no';
       config = configuration();
       const app = new cdk.App();
-      const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', config);
+      const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', {
+        ...config,
+        env: {
+          account: config.account,
+          region: config.region,
+        },
+      });
       resumingStack = mainStack.resumingStack;
     });
 

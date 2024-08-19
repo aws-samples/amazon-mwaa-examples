@@ -29,12 +29,16 @@ export const handler = async (event: Record<string, unknown>): Promise<DagsCliRe
   const bucket = event['bucket'] as string;
 
   console.info(`Unpausing ${dag} ...`);
-  let mwaaResult = await dagsCli.unpauseDag(dag);
-  console.info('DAG unpause result:', mwaaResult);
+  try {
+    const mwaaResult = await dagsCli.unpauseDag(dag);
+    console.info('DAG unpause result:', mwaaResult);
+  } catch (error: any) {
+    console.error('Error unpause DAG:', error);
+  }
 
   const config = { taskToken, bucket };
   console.info(`Trigerring DAG ${dag} with config: `, config);
-  mwaaResult = await dagsCli.triggerDag(dag, config);
+  const mwaaResult = await dagsCli.triggerDag(dag, config);
   console.info('DAG trigger result: ', mwaaResult);
 
   return mwaaResult;

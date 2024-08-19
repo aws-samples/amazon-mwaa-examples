@@ -2,16 +2,9 @@
 <!-- TOC ignore:true -->
 # Automate Stopping and Starting an Amazon MWAA Environment
 
-![typescript](https://img.shields.io/badge/cdk-typescript-blue)
-[![code style: eslint](https://img.shields.io/badge/code%20style-eslint-darkgreen.svg)](https://github.com/psf/black)
-![2.0.2](https://img.shields.io/badge/mwaa-v2.0.2-green)
-![2.2.2](https://img.shields.io/badge/mwaa-v2.2.2-green)
-![2.4.3](https://img.shields.io/badge/mwaa-v2.4.3-green)
-![2.5.1](https://img.shields.io/badge/mwaa-v2.5.1-green)
-![2.6.3](https://img.shields.io/badge/mwaa-v2.6.3-green)
-![2.7.2](https://img.shields.io/badge/mwaa-v2.7.2-green)
-![2.8.1](https://img.shields.io/badge/mwaa-v2.8.1-green)
-
+![typescript](https://img.shields.io/badge/cdk-typescript-green)
+[![code style: eslint](https://img.shields.io/badge/code_style-eslint-orange.svg)](https://github.com/psf/black)
+![MWAA](https://img.shields.io/badge/MWAA-2.9.2_|_2.8.1_|_2.7.2_|_2.6.3_|_2.5.1_|_2.4.3_|_2.2.2_|_2.0.2-blue)
 <!-- TOC ignore:true -->
 # Contents
 
@@ -186,7 +179,7 @@ The stack parameters are externalized as environment variables. Here are the par
 | `CDK_DEFAULT_REGION`            | None                                                           | `us-east-1`                                                                  | Your AWS region where MWAA is deployed.                                                                                                                                                  |
 | `MWAA_MAIN_STACK_NAME`          | None                                                           | `mwaa-pause-resume-dev`, `mwaa-pause-resume-stage`, `mwaa-pause-resume-prod` | The name of the top-level stack. If you need to pause and resume multiple MWAA environments, then you can redeploy this project with different stack names to manage those environments. |
 | `MWAA_ENV_NAME`                 | None                                                           | `my-mwaa-env`                                                                | Name of the deployed MWAA environment -- [Check AWS Console](https://console.aws.amazon.com/mwaa/home#environments).                                                                     |
-| `MWAA_ENV_VERSION`              | None                                                           | `2.8.1`, `2.7.2`, `2.6.3`, `2.5.1`, `2.4.3`, `2.2.2`, `2.0.2`  | Version of the deployed MWAA environment -- [Check AWS Console](https://console.aws.amazon.com/mwaa/home#environments).                                                                  |
+| `MWAA_ENV_VERSION`              | None                                                           | `2.9.2`, `2.8.1`, `2.7.2`, `2.6.3`, `2.5.1`, `2.4.3`, `2.2.2`, `2.0.2`  | Version of the deployed MWAA environment -- [Check AWS Console](https://console.aws.amazon.com/mwaa/home#environments).                                                                  |
 | `MWAA_SOURCE_BUCKET_NAME`       | None                                                           | `my-mwaa-env-bucket`                                                         | Name of the S3 bucket for the environment that hosts DAGs. Check the environment details page on [AWS Console](https://console.aws.amazon.com/mwaa/home#environments).                   |
 | `MWAA_EXECUTION_ROLE_ARN`       | None                                                           | `arn:aws:iam:...`                                                            | ARN of the execution role for your MWAA environment. Check the environment details page on [AWS Console](https://console.aws.amazon.com/mwaa/home#environments).                         |
 | `MWAA_UPDATE_EXECUTION_ROLE`    | None                                                           | `yes` or `no`                                                                | Flag to denote whether to update the existing MWAA execution role with new policies for allowing task token return calls to the pause and resume StepFunctions                           |
