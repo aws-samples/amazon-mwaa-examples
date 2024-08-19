@@ -61,32 +61,15 @@ JOB_IMPORT = "COPY JOB(dag_id,  state, job_type , start_date, \
 
 LOG_IMPORT = "COPY log(dttm, dag_id, task_id, event, execution_date, owner, owner_display_name, run_id, extra) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 POOL_SLOTS = "COPY slot_pool(pool, slots, description, include_deferred) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
-DATASET = "COPY dataset(uri, extra, created_at, updated_at) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
-DATASET_QUEUE = "COPY dataset_dag_run_queue(dataset_id, target_dag_id,  created_at) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
-DATASET_EVENT = "COPY dataset_event(dataset_id, extra, source_task_id, source_dag_id, \
-                    source_run_id,source_map_index,timestamp) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
-DATASET_SCHEDULE = "COPY dag_schedule_dataset_reference(dataset_id, dag_id, created_at, updated_at) \
-                        FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 TRIGGER = "COPY trigger(classpath, kwargs, created_date, triggerer_id)\
              FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
-DAGRUN_DATASET_EVENT = "COPY dagrun_dataset_event(dag_run_id, event_id)\
-             FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 
-
+# Starting in v2.9.2, we are exculing dataset tables from imports as they are auto-generated
 OBJECTS_TO_IMPORT = [
     [DAG_RUN_IMPORT, "dag_run.csv"],
     [LOG_IMPORT, "log.csv"],
     [JOB_IMPORT, "job.csv"],
     [POOL_SLOTS, "slot_pool.csv"],
-    [DATASET, "dataset.csv"],
-
-]
-
-DS_IMPORT = [
-    [DATASET_SCHEDULE, "dag_schedule_dataset_reference.csv"],
-    [DATASET_EVENT, "dataset_event.csv"],
-    [DATASET_QUEUE, "dataset_dag_run_queue.csv"],
-
 ]
 
 # pause all dags before starting export
@@ -281,16 +264,6 @@ with DAG(dag_id=dag_id, schedule_interval=None, catchup=False,  default_args=def
     )
     import_t >> load_triggers >> load_task_instance
 
-    with TaskGroup(group_id='import_ds_tables') as load_ds_sets:
-       for x in DS_IMPORT:
-            load_task = PythonOperator(
-                task_id=x[1],
-                python_callable=load_data,
-                op_kwargs={'query': x[0], 'file': x[1]},
-                provide_context=True
-            )
-    load_task_instance >> load_ds_sets
-
     taskfail_dagrun = PythonOperator(
         task_id="task_fail_run",
         op_kwargs={'query': TASK_FAIL_IMPORT, 'file': 'task_fail.csv'},
@@ -298,14 +271,6 @@ with DAG(dag_id=dag_id, schedule_interval=None, catchup=False,  default_args=def
         provide_context=True
     )
     load_task_instance >> taskfail_dagrun
-
-    load_ds_dagrun = PythonOperator(
-        task_id="load_ds_run",
-        op_kwargs={'query': DAGRUN_DATASET_EVENT, 'file': 'dataset_dag_run_event.csv'},
-        python_callable=load_data,
-        provide_context=True
-    )
-    load_ds_sets >> load_ds_dagrun
 
     activate_dags_t = PythonOperator(
         task_id="activate_dags",
@@ -321,4 +286,3 @@ with DAG(dag_id=dag_id, schedule_interval=None, catchup=False,  default_args=def
     )
     activate_dags_t >> notify_success_t
     taskfail_dagrun >> notify_success_t
-    load_ds_dagrun >> notify_success_t

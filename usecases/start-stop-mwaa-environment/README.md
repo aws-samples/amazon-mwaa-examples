@@ -2,17 +2,9 @@
 <!-- TOC ignore:true -->
 # Automate Stopping and Starting an Amazon MWAA Environment
 
-![typescript](https://img.shields.io/badge/cdk-typescript-blue)
-[![code style: eslint](https://img.shields.io/badge/code%20style-eslint-darkgreen.svg)](https://github.com/psf/black)
-![2.0.2](https://img.shields.io/badge/mwaa-v2.0.2-green)
-![2.2.2](https://img.shields.io/badge/mwaa-v2.2.2-green)
-![2.4.3](https://img.shields.io/badge/mwaa-v2.4.3-green)
-![2.5.1](https://img.shields.io/badge/mwaa-v2.5.1-green)
-![2.6.3](https://img.shields.io/badge/mwaa-v2.6.3-green)
-![2.7.2](https://img.shields.io/badge/mwaa-v2.7.2-green)
-![2.8.1](https://img.shields.io/badge/mwaa-v2.8.1-green)
-![2.9.2](https://img.shields.io/badge/mwaa-v2.9.2-green)
-
+![typescript](https://img.shields.io/badge/cdk-typescript-green)
+[![code style: eslint](https://img.shields.io/badge/code_style-eslint-orange.svg)](https://github.com/psf/black)
+![MWAA](https://img.shields.io/badge/MWAA-2.9.2_|_2.8.1_|_2.7.2_|_2.6.3_|_2.5.1_|_2.4.3_|_2.2.2_|_2.0.2-blue)
 <!-- TOC ignore:true -->
 # Contents
 

@@ -32,7 +32,13 @@ describe('MwaaPausingStack', () => {
 
     config = configuration();
     const app = new cdk.App();
-    const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', config);
+    const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', {
+      ...config,
+      env: {
+        account: config.account,
+        region: config.region,
+      },
+    });
     pausingStack = mainStack.pausingStack;
   });
 

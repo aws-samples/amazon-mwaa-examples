@@ -33,7 +33,13 @@ describe('MwaaCommonStack', () => {
 
       config = configuration();
       const app = new cdk.App();
-      const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', config);
+      const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', {
+        ...config,
+        env: {
+          account: config.account,
+          region: config.region,
+        },
+      });
       commonStack = mainStack.commonStack;
     });
 
@@ -78,7 +84,13 @@ describe('MwaaCommonStack', () => {
 
       config = configuration();
       const app = new cdk.App();
-      const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', config);
+      const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', {
+        ...config,
+        env: {
+          account: config.account,
+          region: config.region,
+        },
+      });
       commonStack = mainStack.commonStack;
     });
 

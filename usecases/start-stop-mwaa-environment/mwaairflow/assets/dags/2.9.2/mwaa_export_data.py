@@ -66,12 +66,7 @@ JOB_SELECT = "select dag_id,  state, job_type , start_date, \
 end_date, latest_heartbeat, executor_class, hostname, unixname from job"
 
 POOL_SLOTS = "select pool, slots, description, include_deferred from slot_pool where pool != 'default_pool'"
-DATASET = "select uri, extra, created_at, updated_at from dataset"
-DATASET_QUEUE = "select dataset_id, target_dag_id,  created_at  from dataset_dag_run_queue"
-DATASET_EVENT = "select dataset_id, extra, source_task_id, source_dag_id, source_run_id,source_map_index,timestamp from dataset_event"
-DATASET_SCHEDULE = "select dataset_id, dag_id, created_at, updated_at  from dag_schedule_dataset_reference"
 TRIGGER = "select classpath, kwargs, created_date, triggerer_id from trigger"
-DAGRUN_DATASET_EVENT = "select dag_run_id, event_id from dagrun_dataset_event"
 
 
 ##################
@@ -81,6 +76,7 @@ DAGRUN_DATASET_EVENT = "select dag_run_id, event_id from dagrun_dataset_event"
 
 # This object contains the statement to select and the table name
 # The data is exported to the S3 Bucket defined at the top.
+# Starting in v2.9.2, we are exculing dataset tables from imports as they are auto-generated
 
 ##################
 # If you add newer tables, They need an entry here as well
@@ -92,15 +88,9 @@ OBJECTS_TO_EXPORT = [
     [LOG_SELECT, "log"],
     [TASK_FAIL_SELECT, "task_fail"],
     [JOB_SELECT, "job"],
-    [DATASET, "dataset"],
-    [DATASET_SCHEDULE, "dag_schedule_dataset_reference"],
-    [DATASET_EVENT, "dataset_event"],
-    [DATASET_QUEUE, "dataset_dag_run_queue"],
-    [DAGRUN_DATASET_EVENT, "dagrun_dataset_event"],
     [TRIGGER, "trigger"],
     [POOL_SLOTS, "slot_pool"]
 ]
-
 
 def stream_to_S3_fn(context, result, filename):
     from smart_open import open

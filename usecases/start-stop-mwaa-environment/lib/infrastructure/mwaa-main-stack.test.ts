@@ -30,7 +30,13 @@ describe('MwaaMainStack', () => {
     const config = configuration();
 
     const app = new cdk.App();
-    const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', config);
+    const mainStack = new MwaaMainStack(app, 'mwaa-main-stack', {
+      ...config,
+      env: {
+        account: config.account,
+        region: config.region,
+      },
+    });
     const commonStack = mainStack.commonStack;
     const pollingStack = mainStack.pollingStack;
     const pausingStack = mainStack.pausingStack;

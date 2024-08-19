@@ -37,7 +37,13 @@ describe('MWAANotificationStack', () => {
 
       config = configuration();
       const app = new cdk.App();
-      mainStack = new MwaaMainStack(app, 'mwaa-main-stack', config);
+      mainStack = new MwaaMainStack(app, 'mwaa-main-stack', {
+        ...config,
+        env: {
+          account: config.account,
+          region: config.region,
+        },
+      });
       notificationStack = mainStack.notificationStack;
     });
 
@@ -90,7 +96,13 @@ describe('MWAANotificationStack', () => {
 
       config = configuration();
       const app = new cdk.App();
-      mainStack = new MwaaMainStack(app, 'mwaa-main-stack', config);
+      mainStack = new MwaaMainStack(app, 'mwaa-main-stack', {
+        ...config,
+        env: {
+          account: config.account,
+          region: config.region,
+        },
+      });
       notificationStack = mainStack.notificationStack;
     });
 
@@ -147,7 +159,13 @@ describe('MWAANotificationStack', () => {
 
       config = configuration();
       const app = new cdk.App();
-      mainStack = new MwaaMainStack(app, 'mwaa-main-stack', config);
+      mainStack = new MwaaMainStack(app, 'mwaa-main-stack', {
+        ...config,
+        env: {
+          account: config.account,
+          region: config.region,
+        },
+      });
       notificationStack = mainStack.notificationStack;
       expect(notificationStack).not.toBeTruthy();
     });
@@ -161,10 +179,15 @@ describe('MWAANotificationStack', () => {
 
       config = configuration();
       const app = new cdk.App();
-
       expect.assertions(1);
       try {
-        new MwaaMainStack(app, 'mwaa-main-stack', config);
+        new MwaaMainStack(app, 'mwaa-main-stack', {
+          ...config,
+          env: {
+            account: config.account,
+            region: config.region,
+          },
+        });
       } catch (error) {
         expect(error.message).toEqual('Invalid email [def@example] supplied in the MWAA_NOTIFICATION_EMAILS environment variable!');
       }
