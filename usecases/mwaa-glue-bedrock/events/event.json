@@ -1,0 +1,45 @@
+{
+  "version": "0",
+  "id": "5dab3fd5-9db0-935e-350d-f3d8aa453950",
+  "detail-type": "CaseChangeEvent",
+  "source": "aws.partner/salesforce.com/00D4K000005OuoUUAS/0YLJ9000000003POAQ",
+  "account": "515232103838",
+  "time": "2024-09-17T09:22:12Z",
+  "region": "us-east-1",
+  "resources": [],
+  "detail": {
+    "payload": {
+      "Origin": "Phone",
+      "LastModifiedDate": "2024-09-17T09:22:10.000Z",
+      "Description": "This is a test description",
+      "IsClosed": false,
+      "BusinessHoursId": "01m4K000000CFNLQA4",
+      "OwnerId": "0054K000003K5EAQA0",
+      "CreatedById": "0054K000003K5EAQA0",
+      "CaseNumber": "00001037",
+      "IsClosedOnCreate": false,
+      "Status": "New",
+      "Priority": "Medium",
+      "Subject": "sadfdsfa",
+      "IsEscalated": false,
+      "ChangeEventHeader": {
+        "commitNumber": 1675935024583,
+        "commitUser": "0054K000003K5EAQA0",
+        "sequenceNumber": 1,
+        "entityName": "Case",
+        "changeType": "CREATE",
+        "changedFields": [],
+        "changeOrigin": "com/salesforce/api/soap/61.0;client=SfdcInternalAPI/",
+        "transactionKey": "00033cd8-1c87-287c-3abb-69cbae6bb643",
+        "commitTimestamp": 1726564930000,
+        "recordIds": [
+          "500J9000005b3zgIAA"
+        ]
+      },
+      "CreatedDate": "2024-09-17T09:22:10.000Z",
+      "LastModifiedById": "0054K000003K5EAQA0"
+    },
+    "schemaId": "lji40tf8aFHQpZ3TTlGKYA",
+    "id": "e06900d8-e41a-4a3e-822d-a4b337d232da"
+  }
+}
