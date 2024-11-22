@@ -1,5 +1,5 @@
 import sys
-import os
+import boto3
 import requests
 import subprocess
 import json
@@ -41,6 +41,19 @@ def run_cli_command(command, cwd=None):
     
     # Return the stdout as a single string, joining the lines
     return "\n".join(stdout_data)
+
+# Retrieve Salesforce credentials from AWS Secrets Manager
+def get_salesforce_credentials(secret_name, region):
+    print(f"Retrieving Salesforce credentials from Secrets Manager: {secret_name}")
+    try:
+        session = boto3.session.Session()
+        client = session.client(service_name="secretsmanager", region_name=region)
+        get_secret_value_response = client.get_secret_value(SecretId=secret_name)
+        secret = json.loads(get_secret_value_response["SecretString"])
+        return secret["USER_MANAGED_CLIENT_APPLICATION_CLIENT_ID"], secret["USER_MANAGED_CLIENT_APPLICATION_CLIENT_SECRET"]
+    except Exception as e:
+        print(f"Error retrieving secret: {e}")
+        sys.exit(1)
 
 # Function to get an access token using client credentials flow
 def get_access_token(client_id, client_secret, sfdc_base_url):
@@ -252,7 +265,6 @@ def handle_cloudformation_deletion(stack_name, region):
     # Step 3: Delete the CloudFormation stack
     delete_cloudformation_stack(stack_name, region)
 
-
 # Function to display a warning message and prompt the user for confirmation
 def warn_and_confirm(warning_message):
     print(warning_message)
@@ -268,7 +280,7 @@ def warn_and_confirm(warning_message):
         print("Proceeding with resource deletion...")
 
 # Main function
-def main(salesforce_domain, region, client_id=None, client_secret=None):
+def main(salesforce_domain, region):
     # Display warning and confirm
     warning_message = f"""
     WARNING! Executing this script will delete all resources, including:
@@ -282,6 +294,9 @@ def main(salesforce_domain, region, client_id=None, client_secret=None):
     Do you wish to proceed? (yes/no): 
     """    
     warn_and_confirm(warning_message)
+
+    # Try to get client_id and client_secret from environment variables if not provided
+    client_id, client_secret = get_salesforce_credentials("glue/connections/salesforce_connection", region)
 
     #### Glue / EventBridge Resources #####
     # Delete Glue resources if they exist:
@@ -301,10 +316,7 @@ def main(salesforce_domain, region, client_id=None, client_secret=None):
 
     #### DELETE SFDC Resources #####
 
-    # Try to get client_id and client_secret from environment variables if not provided
-    client_id = client_id or os.getenv('SALESFORCE_CLIENT_ID')
-    client_secret = client_secret or os.getenv('SALESFORCE_CLIENT_SECRET')
-
+    
     sfdc_base_url = salesforce_domain
 
 
@@ -332,7 +344,7 @@ def main(salesforce_domain, region, client_id=None, client_secret=None):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python script.py <SalesforceOrg Alias> <AWS Region Id> [<Client ID> <Client Secret>]")
+        print("Usage: python script.py <SalesforceOrg Alias> <AWS Region Id>")
         sys.exit(1)
 
     salesforce_domain = sys.argv[1]
@@ -342,10 +354,8 @@ if __name__ == "__main__":
     
 
     region = sys.argv[2] if len(sys.argv) > 2 else None
-    client_id = sys.argv[3] if len(sys.argv) > 3 else None
-    client_secret = sys.argv[4] if len(sys.argv) > 4 else None
-    print(f"Client ID: {client_id}, Client Secret: {client_secret}")
 
-    main(salesforce_domain, region, client_id, client_secret)
+
+    main(salesforce_domain, region)
 
     print("CloudFormation Template Deletion initiated. Please check on the AWS console and verify it completes.")
