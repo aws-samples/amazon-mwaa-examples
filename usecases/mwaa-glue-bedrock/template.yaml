@@ -1,0 +1,604 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  MWAA Environment with VPC setup. 
+  EventBridge Partner Source and Rule.
+  Lambda function to process Events and publish as Datasets updates.
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 128
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that is prefixed to resource names
+    Type: String
+    Default: MWAAEnvironment
+
+  SalesforceInstanceUrl:
+    Type: String
+    Description: "Salesforce Instance URL"
+    Default: ""
+  SalesforceClientId:
+    Type: String
+    Description: "Salesforce Client ID"
+    Default: ""
+  SalesforceClientSecret:
+    Type: String
+    Description: "Salesforce Client Secret"
+    Default: ""
+  SalesforceJwtToken:
+    Type: String
+    Description: "JWT Token"
+    Default: ""
+  SalesforcePrivateKeyPath:
+    Type: String
+    Description: "Private Key used for JWT Token"
+    Default: ""
+  SalesforcePublicKeyPath:
+    Type: String
+    Description: "Public Key used for JWT Token"
+    Default: ""
+
+
+  VpcCIDR:
+    Description: The IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.192.0.0/16
+  PublicSubnet1CIDR:
+    Description: The IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.192.10.0/24
+  PublicSubnet2CIDR:
+    Description: The IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.192.11.0/24
+  PrivateSubnet1CIDR:
+    Description: The IP range (CIDR notation) for the private subnet in the first Availability Zone
+    Type: String
+    Default: 10.192.20.0/24
+  PrivateSubnet2CIDR:
+    Description: The IP range (CIDR notation) for the private subnet in the second Availability Zone
+    Type: String
+    Default: 10.192.21.0/24
+  MinWorkerNodes:
+    Description: The minimum number of workers that can run in the environment
+    Type: Number
+    Default: 2
+  MaxWorkerNodes:
+    Description: The maximum number of workers that can run in the environment
+    Type: Number
+    Default: 10
+  EnvironmentSize:
+    Description: The size of the environment
+    Type: String
+    Default: mw1.medium
+  DagProcessingLogs:
+    Description: Log level for DagProcessing
+    Type: String
+    Default: INFO
+  SchedulerLogsLevel:
+    Description: Log level for SchedulerLogs
+    Type: String
+    Default: INFO
+  TaskLogsLevel:
+    Description: Log level for TaskLogs
+    Type: String
+    Default: INFO
+  WorkerLogsLevel:
+    Description: Log level for WorkerLogs
+    Type: String
+    Default: INFO
+  WebserverLogsLevel:
+    Description: Log level for WebserverLogs
+    Type: String
+    Default: INFO
+
+Resources:
+  #####################################################################################################################
+  # CREATE VPC
+  #####################################################################################################################
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: MWAAEnvironment
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: MWAAEnvironment
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref PublicSubnet1CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Subnet (AZ1)
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: !Ref PublicSubnet2CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Subnet (AZ2)
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Subnet (AZ1)
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Subnet (AZ2)
+
+  NatGateway1EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway2EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway2EIP.AllocationId
+      SubnetId: !Ref PublicSubnet2
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Routes
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Routes (AZ1)
+
+  DefaultPrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      SubnetId: !Ref PrivateSubnet1
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Routes (AZ2)
+
+  DefaultPrivateRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      SubnetId: !Ref PrivateSubnet2
+
+  EC2DHCPOptions:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      DomainName: ec2.internal
+      DomainNameServers:
+        - AmazonProvidedDNS
+
+  DHCPAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      VpcId: !Ref VPC
+      DhcpOptionsId: !Ref EC2DHCPOptions
+
+  #####################################################################################################################
+  # CREATE MWAA
+  #####################################################################################################################
+  MWAAEnvironmentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration: 
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  artifactBucket:
+    Type: 'AWS::S3::Bucket'
+
+  MwaaEnvironment:
+    Type: AWS::MWAA::Environment
+    DependsOn: MwaaExecutionPolicy
+    Properties:
+      AirflowConfigurationOptions:
+        core.dags_are_paused_at_creation: 'False'
+        scheduler.catchup_by_default: 'False'
+        webserver.warn_deployment_exposure: 'False'
+        secrets.backend: >-
+          airflow.providers.amazon.aws.secrets.secrets_manager.SecretsManagerBackend
+        secrets.backend_kwargs: >-
+          {"connections_prefix" : "airflow/connections", "variables_prefix" : "airflow/variables", 
+          "variables_lookup_pattern" : "", "connections_lookup_pattern" : "",
+          "config_prefix" : "airflow/config", "config_lookup_pattern" : " "}        
+      AirflowVersion: 2.10.1   
+      Name: !Sub "${AWS::StackName}-MwaaEnvironment"
+      SourceBucketArn: !GetAtt MWAAEnvironmentBucket.Arn
+      ExecutionRoleArn: !GetAtt MwaaExecutionRole.Arn
+      DagS3Path: dags/
+      NetworkConfiguration:
+        SecurityGroupIds:
+          - !GetAtt SecurityGroup.GroupId
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+      WebserverAccessMode: PUBLIC_ONLY
+      EnvironmentClass: !Ref EnvironmentSize
+      MinWorkers: !Ref MinWorkerNodes
+      MaxWorkers: !Ref MaxWorkerNodes
+      LoggingConfiguration:
+        DagProcessingLogs:
+          LogLevel: !Ref DagProcessingLogs
+          Enabled: true
+        SchedulerLogs:
+          LogLevel: !Ref SchedulerLogsLevel
+          Enabled: true
+        TaskLogs:
+          LogLevel: !Ref TaskLogsLevel
+          Enabled: true
+        WorkerLogs:
+          LogLevel: !Ref WorkerLogsLevel
+          Enabled: true
+        WebserverLogs:
+          LogLevel: !Ref WebserverLogsLevel
+          Enabled: true
+          
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: !Sub "Security Group for Amazon MWAA Environment ${AWS::StackName}-MwaaEnvironment"
+      GroupName: !Sub "airflow-security-group-${AWS::StackName}-MwaaEnvironment"
+  
+  SecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: "-1"
+      SourceSecurityGroupId: !Ref SecurityGroup
+
+  SecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: "-1"
+      CidrIp: "0.0.0.0/0"
+
+  MwaaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - airflow-env.amazonaws.com
+                - airflow.amazonaws.com
+            Action:
+             - "sts:AssumeRole"
+      Path: "/service-role/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSGlueConsoleFullAccess
+
+  MwaaExecutionPolicy:
+    DependsOn: MWAAEnvironmentBucket
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Roles:
+        - !Ref MwaaExecutionRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: airflow:PublishMetrics
+            Resource:
+              - !Sub "arn:aws:airflow:${AWS::Region}:${AWS::AccountId}:environment/${EnvironmentName}"
+          - Effect: Deny
+            Action: s3:ListAllMyBuckets
+            Resource:
+              - !Sub "${MWAAEnvironmentBucket.Arn}"
+              - !Sub "${MWAAEnvironmentBucket.Arn}/*"
+              - !Sub "${artifactBucket.Arn}"
+              - !Sub "${artifactBucket.Arn}/*"
+          - Effect: Allow
+            Action:
+              - "s3:GetObject*"
+              - "s3:GetBucket*"
+              - "s3:List*"
+            Resource:
+              - !Sub "${MWAAEnvironmentBucket.Arn}"
+              - !Sub "${MWAAEnvironmentBucket.Arn}/*"
+              - !Sub "${artifactBucket.Arn}"
+              - !Sub "${artifactBucket.Arn}/*"              
+          - Effect: Allow
+            Action:
+              - logs:DescribeLogGroups
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "glue:*"
+              - "athena:*"
+              - "s3:*"
+              - "bedrock:*"
+              - "logs:*"
+              - "events:*"
+              - "lambda:*"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/${AWSGlueJobRole}"
+          - Effect: Allow
+            Action:
+              - logs:DescribeLogGroups
+            Resource: "*"
+
+          - Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+              - logs:PutLogEvents
+              - logs:GetLogEvents
+              - logs:GetLogRecord
+              - logs:GetLogGroupFields
+              - logs:GetQueryResults
+              - logs:DescribeLogGroups
+            Resource:
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:airflow-${AWS::StackName}*"
+          - Effect: Allow
+            Action: cloudwatch:PutMetricData
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - sqs:ChangeMessageVisibility
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+              - sqs:GetQueueUrl
+              - sqs:ReceiveMessage
+              - sqs:SendMessage
+            Resource:
+              - !Sub "arn:aws:sqs:${AWS::Region}:*:airflow-celery-*"
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+              - secretsmanager:DescribeSecret
+              - secretsmanager:ListSecrets
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+              - "kms:GenerateDataKey*"
+              - kms:Encrypt
+            NotResource: !Sub "arn:aws:kms:*:${AWS::AccountId}:key/*"
+            Condition:
+              StringLike:
+                "kms:ViaService":
+                  - !Sub "sqs.${AWS::Region}.amazonaws.com"
+
+  SalesforceConnectionSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: MWAA Salesforce Connection
+      Name: airflow/connections/salesforce_connection
+      SecretString: !Sub '{"conn_id": "salesforce_connection", "conn_type":"http", "host":"${SalesforceInstanceUrl}", "extra":{"client_id":"${SalesforceClientId}", "client_secret":"${SalesforceClientSecret}", "aws_account_id":"${AWS::AccountId}", "aws_region": "${AWS::Region}"}, "USER_MANAGED_CLIENT_APPLICATION_CLIENT_SECRET":"${SalesforceClientSecret}", "USER_MANAGED_CLIENT_APPLICATION_CLIENT_ID":"${SalesforceClientId}"}'
+
+  GlueSalesforceConnectionSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: AWS Glue Salesforce Connection
+      Name: glue/connections/salesforce_connection
+      SecretString: !Sub '{"USER_MANAGED_CLIENT_APPLICATION_CLIENT_SECRET":"${SalesforceClientSecret}", "USER_MANAGED_CLIENT_APPLICATION_CLIENT_ID":"${SalesforceClientId}", "JWT_TOKEN": "${SalesforceJwtToken}", "PEM_PRIVATE_KEY_PATH": "s3://${MWAAEnvironmentBucket}/${SalesforcePrivateKeyPath}", "PEM_PUBLIC_KEY_PATH": "s3://${MWAAEnvironmentBucket}/${SalesforcePublicKeyPath}"}'
+      
+  MWAAVarsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: MWAA Variables
+      Name: airflow/variables/mwaa
+      SecretString: !Sub '{"artifactBucket": "${artifactBucket}", "glueExecutionRole": "${AWSGlueJobRole}", "stackName": "${AWS::StackName}"}'
+
+  # GlueConnection:
+  #   Type: AWS::Glue::Connection
+  #   Properties: 
+  #     CatalogId: !Ref AWS::AccountId
+  #     ConnectionInput:
+  #       Name: "salesforce_connection"
+  #       ConnectionType: "SALESFORCE"
+  #       ConnectionProperties:
+  #         INSTANCE_URL: !Ref SalesforceInstanceUrl
+  #         ROLE_ARN: !GetAtt AWSGlueJobRole.Arn
+  #       AuthenticationConfiguration: 
+  #         AuthenticationType: OAUTH2
+  #         SecretArn: !Ref GlueSalesforceConnectionSecret
+  #         OAuth2Properties: 
+  #           OAuth2GrantType: "CLIENT_CREDENTIALS"
+  #         OAuth2ClientApplication:
+  #           ClientAppType: "USER_MANAGED"
+  #           UserManagedClientApplicationClientId: !Ref SalesforceClientId
+
+  EndpointS3:
+    Type: 'AWS::EC2::VPCEndpoint'
+    Properties:
+      RouteTableIds: [!Ref PublicRouteTable, !Ref PrivateRouteTable1, !Ref PrivateRouteTable2]
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcId: !Ref VPC
+
+  AWSGlueJobRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                  - "s3:ListBucket"
+                  - "s3:DeleteObject"
+                Resource:
+                  - !Sub "${artifactBucket.Arn}"
+                  - !Sub "${artifactBucket.Arn}/*"
+              - Effect: Allow
+                Action:
+                  - "secretsmanager:*"
+                Resource:
+                  - !Ref GlueSalesforceConnectionSecret
+
+              - Effect: Allow
+                Action:
+                  - "logs:*"
+                  - "glue:*"
+                Resource: "*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+      Path: "/"
+              
+  PublishDatasetsUpdateFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/lambda
+      Handler: app.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Policies:
+      - Statement:
+        - Sid: CreateWebLoginToken
+          Effect: Allow
+          Action:
+          - airflow:CreateWebLoginToken
+          Resource: '*'
+      Environment:
+        Variables:
+          MWAA_ENV: !Ref MwaaEnvironment
+          MWAA_AWS_REGION: !Ref "AWS::Region"
+      PropagateTags: True
+      Tags:  # Adding the Tags so we can filter the function later and add as target to EventBridge
+        integration: "mwaa-salesforce"    
+
+Outputs:
+  MwaaApacheAirflowUI:
+    Description: MWAA Environment
+    Value: !Sub  "https://${MwaaEnvironment.WebserverUrl}"
+
+  artifactBucket:
+    Description: Name of the data and metadata aretfact bucket
+    Value: !Ref artifactBucket  
+
+  MWAAEnvironmentBucket:
+    Description: Name of the MWAA Environment bucket
+    Value: !Ref MWAAEnvironmentBucket
+
+  AWSGlueJobRoleArn:
+    Description: Name of AWSGlueJobRole role
+    Value: !GetAtt AWSGlueJobRole.Arn
+
+  AWSGlueConnectionSecretArn: 
+    Description: Glue Connection
+    Value: !Ref GlueSalesforceConnectionSecret
