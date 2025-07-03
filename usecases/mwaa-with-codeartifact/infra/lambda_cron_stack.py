@@ -1,19 +1,20 @@
+import aws_cdk as cdk
 from aws_cdk import (
     aws_events as events,
     aws_lambda as lambda_,
     aws_events_targets as targets,
     aws_iam as iam,
-    core,
 )
+from constructs import Construct
 
 from infra.codeartifact_stack import CodeArtifactStack
 from infra.s3_stack import S3Stack
 
 
-class LambdaCronStack(core.Stack):
+class LambdaCronStack(cdk.Stack):
     def __init__(
         self,
-        scope: core.Construct,
+        scope: Construct,
         id: str,
         ca: CodeArtifactStack,
         s3: S3Stack,
@@ -49,8 +50,8 @@ class LambdaCronStack(core.Stack):
             "MWAA-UpdateCodeArtifactIndexURL",
             code=lambda_.InlineCode(handler_code),
             handler="index.handler",
-            timeout=core.Duration.seconds(300),
-            runtime=lambda_.Runtime.PYTHON_3_7,
+            timeout=cdk.Duration.seconds(300),
+            runtime=lambda_.Runtime.PYTHON_3_12,
             environment={
                 "CA_DOMAIN": ca.repo.domain_name,
                 "CA_DOMAIN_OWNER": self.account,
@@ -67,10 +68,10 @@ class LambdaCronStack(core.Stack):
         rule = events.Rule(
             self,
             "Rule",
-            schedule=events.Schedule.rate(core.Duration.hours(10)),
+            schedule=events.Schedule.rate(cdk.Duration.hours(10)),
             enabled=True,
         )
         rule.add_target(targets.LambdaFunction(lambda_fn))
 
         # Invoke Lambda once after cdk deploy
-        core.CustomResource(self, "InvokeLambda", service_token=lambda_fn.function_arn)
+        cdk.CustomResource(self, "InvokeLambda", service_token=lambda_fn.function_arn)
