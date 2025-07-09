@@ -1,18 +1,20 @@
 import os
 
-from aws_cdk import aws_mwaa as mwaa, aws_iam as iam, core
+import aws_cdk as cdk
+from aws_cdk import aws_mwaa as mwaa, aws_iam as iam
+from constructs import Construct
 from infra.s3_stack import S3Stack
 from infra.vpc_stack import VpcStack
 
 
-class MwaaStack(core.Stack):
+class MwaaStack(cdk.Stack):
     def __init__(
-        self, scope: core.Construct, id: str, vpc: VpcStack, s3: S3Stack, **kwargs
+        self, scope: Construct, id: str, vpc: VpcStack, s3: S3Stack, **kwargs
     ) -> None:
         super().__init__(scope, id, **kwargs)
 
         mwaa_env_name = "mwaa_codeartifact_env"
-        airflow_version = os.environ.get("AIRFLOW_VERSION", "2.0.2")
+        airflow_version = os.environ.get("AIRFLOW_VERSION", "2.10.3")
 
         # Create MWAA role
         mwaa_role = iam.Role(
@@ -94,7 +96,7 @@ class MwaaStack(core.Stack):
                 effect=iam.Effect.ALLOW,
             )
         )
-        string_like = core.CfnJson(
+        string_like = cdk.CfnJson(
             self,
             "ConditionJson",
             value={f"kms:ViaService": f"sqs.{self.region}.amazonaws.com"},

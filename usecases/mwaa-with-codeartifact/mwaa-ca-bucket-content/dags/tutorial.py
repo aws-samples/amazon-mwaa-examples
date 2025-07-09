@@ -2,8 +2,8 @@ import numpy as np
 
 from datetime import timedelta
 from airflow import DAG
-from airflow.operators.bash_operator import BashOperator
-from airflow.operators.python_operator import PythonOperator
+from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
 from airflow.utils.dates import days_ago
 
 
@@ -71,7 +71,6 @@ def example_with_numpy(**kwargs):
 print_matrix = PythonOperator(
     task_id="print_matrix",
     python_callable=example_with_numpy,
-    provide_context=True,
     dag=dag,
 )
 

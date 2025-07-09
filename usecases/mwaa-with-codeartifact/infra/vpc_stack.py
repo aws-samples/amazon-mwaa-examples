@@ -1,16 +1,18 @@
-from aws_cdk import core, aws_ec2 as ec2
+import aws_cdk as cdk
+from aws_cdk import aws_ec2 as ec2
+from constructs import Construct
 from typing import List
 
 
-class VpcStack(core.Stack):
-    def __init__(self, scope: core.Construct, id: str, **kwargs) -> None:
+class VpcStack(cdk.Stack):
+    def __init__(self, scope: Construct, id: str, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
         self._instance = ec2.Vpc(
             self,
             "mwaa-vpc",
             max_azs=2,
-            cidr="10.0.0.0/16",
+            ip_addresses=ec2.IpAddresses.cidr("10.0.0.0/16"),
             subnet_configuration=self.subnets,
             enable_dns_hostnames=True,
             enable_dns_support=True,
@@ -19,23 +21,25 @@ class VpcStack(core.Stack):
         self.create_security_groups()
         self.create_endpoints()
         self.tag_subnets()
-        core.CfnOutput(self, "Output", value=self._instance.vpc_id)
+        cdk.CfnOutput(self, "Output", value=self._instance.vpc_id)
 
     @property
-    def instance(self) -> core.Resource:
+    def instance(self) -> ec2.Vpc:
         return self._instance
 
     @property
-    def get_vpc_private_subnet_ids(self) -> ec2.SelectedSubnets:
+    def get_vpc_private_subnet_ids(self) -> List[str]:
         return self.instance.select_subnets(
-            subnet_type=ec2.SubnetType.ISOLATED
+            subnet_type=ec2.SubnetType.PRIVATE_ISOLATED
         ).subnet_ids
 
     @property
-    def subnets(self) -> List:
+    def subnets(self) -> List[ec2.SubnetConfiguration]:
         return [
             ec2.SubnetConfiguration(
-                subnet_type=ec2.SubnetType.ISOLATED, name="mwaa-private", cidr_mask=24
+                subnet_type=ec2.SubnetType.PRIVATE_ISOLATED, 
+                name="mwaa-private", 
+                cidr_mask=24
             ),
         ]
 
@@ -75,7 +79,7 @@ class VpcStack(core.Stack):
                 name,
                 vpc=self.instance,
                 service=service,
-                subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.ISOLATED),
+                subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_ISOLATED),
                 private_dns_enabled=True,
                 security_groups=[self.mwaa_sg],
             )
@@ -83,11 +87,11 @@ class VpcStack(core.Stack):
         self.instance.add_gateway_endpoint(
             "s3-endpoint",
             service=ec2.GatewayVpcEndpointAwsService.S3,
-            subnets=[ec2.SubnetSelection(subnet_type=ec2.SubnetType.ISOLATED)],
+            subnets=[ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_ISOLATED)],
         )
 
     def tag_subnets(self) -> None:
-        selection = self.instance.select_subnets(subnet_type=ec2.SubnetType.ISOLATED)
+        selection = self.instance.select_subnets(subnet_type=ec2.SubnetType.PRIVATE_ISOLATED)
         for subnet in selection.subnets:
-            core.Tags.of(subnet).add("Name", f"mwaa-private-{subnet.availability_zone}")
-        core.Tags.of(self.instance).add("Name", "private-mwaa-vpc")
+            cdk.Tags.of(subnet).add("Name", f"mwaa-private-{subnet.availability_zone}")
+        cdk.Tags.of(self.instance).add("Name", "private-mwaa-vpc")
