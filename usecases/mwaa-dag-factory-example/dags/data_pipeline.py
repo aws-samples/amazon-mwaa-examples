@@ -38,7 +38,9 @@ with DAG(
             "Role": "{{GLUE_ROLE_ARN}}",
             "DatabaseName": "default",
             "Targets": {"S3Targets": [{"Path": "{{S3_BUCKET_NAME}}/data/raw/green"}]}
-        }
+        },
+        retries=3,
+        retry_delay=timedelta(minutes=2)
     )
 
     glue_job = GlueJobOperator(

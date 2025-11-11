@@ -26,6 +26,8 @@ example_data_pipeline_yaml:
       operator: airflow.providers.amazon.aws.operators.glue_crawler.GlueCrawlerOperator
       dependencies:
         - s3_sensor
+      retries: 3
+      retry_delay_sec: 120
       config:
         Name: airflow-workshop-raw-green-crawler
         Role: "{{GLUE_ROLE_ARN}}"
