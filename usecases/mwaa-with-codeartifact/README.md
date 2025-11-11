@@ -27,11 +27,11 @@ This project demonstrates how to create an [Amazon MWAA](https://aws.amazon.com/
 Before moving on with the project deployment, complete the following checks: 
 
 * Install [`npm`](https://www.npmjs.com/get-npm) on your machine
-* Install [`Python`](https://www.python.org/downloads/) on your machine
+* Install [`Python`](https://www.python.org/downloads/) on your machine (Python 3.8 or higher)
 * Ensure that [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) is installed and configured on your machine
 * Ensure that [AWS CDK](https://aws.amazon.com/cdk/) is [installed and configured](https://docs.aws.amazon.com/cdk/latest/guide/getting_started.html#getting_started_prerequisites) on your machine
 
-_**NOTE:** :warning: This project uses CDK library version `1.102.0`, hence the same version or higher is required._
+_**NOTE:** :information_source: This project uses CDK v2, which requires Node.js 18.x or later._
 
 ### Python virtual environment
 
@@ -51,7 +51,7 @@ Set environment variables in `.env` file.
 
 * `AWS_REGION`: AWS region to which you wish to deploy this project
 * `BUCKET_NAME`: choose a unique name for an Amazon S3 bucket that will contain Airflow DAGs
-* `AIRFLOW_VERSION`: Apache Airflow version (`v1.10.12` or `v2.0.2`) - set to [the latest `v2.0.2`](https://docs.aws.amazon.com/mwaa/latest/userguide/airflow-versions.html)
+* `AIRFLOW_VERSION`: Apache Airflow version (recommended: `2.10.3` or latest supported version)
 
 
 ### Deploy the infrastructure
@@ -102,6 +102,16 @@ aws mwaa update-environment --name mwaa_codeartifact_env --requirements-s3-objec
 ```
 
 If you build your own Python packages, you could also add this process to update `requirements.txt` and MWAA environment as part of your [release pipeline](https://docs.aws.amazon.com/codeartifact/latest/ug/using-python-packages-in-codebuild.html).
+
+## Updates Made
+
+This project has been updated to use current AWS tools and runtimes:
+
+- **CDK v2**: Migrated from deprecated CDK v1 to CDK v2
+- **Python 3.12**: Updated Lambda runtime from deprecated Python 3.7 to Python 3.12
+- **Airflow 2.10.3**: Updated to latest supported Airflow version
+- **Current Operators**: Updated Airflow DAG to use current operators instead of deprecated ones
+- **Modern CDK Patterns**: Updated VPC configuration to use current subnet types and IP address configuration
 
 ## License
 
