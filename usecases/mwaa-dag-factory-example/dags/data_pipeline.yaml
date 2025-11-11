@@ -1,0 +1,137 @@
+# YAML DAG for MWAA Data Pipeline Workshop
+# This is a templatized version that gets deployed with actual values
+example_data_pipeline_yaml:
+  dag_id: example_data_pipeline_yaml
+  description: "YAML-based data pipeline for NYC taxi data processing"
+  schedule: null
+  start_date: "2025-11-01"
+  catchup: false
+  dagrun_timeout_sec: 7200
+  
+  default_args:
+    owner: airflow
+    retries: 0
+    retry_delay_sec: 120
+  
+  tasks:
+    s3_sensor:
+      operator: airflow.providers.amazon.aws.sensors.s3.S3KeySensor
+      bucket_name: "{{S3_BUCKET_NAME}}"
+      bucket_key: "data/raw/green*"
+      wildcard_match: true
+      timeout: 600
+      poke_interval: 30
+    
+    glue_crawler:
+      operator: airflow.providers.amazon.aws.operators.glue_crawler.GlueCrawlerOperator
+      dependencies:
+        - s3_sensor
+      config:
+        Name: airflow-workshop-raw-green-crawler
+        Role: "{{GLUE_ROLE_ARN}}"
+        DatabaseName: default
+        Targets:
+          S3Targets:
+            - Path: "{{S3_BUCKET_NAME}}/data/raw/green"
+    
+    glue_job:
+      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+      dependencies:
+        - glue_crawler
+      job_name: nyc_raw_to_transform
+      script_location: "s3://{{S3_BUCKET_NAME}}/scripts/glue/nyc_raw_to_transform.py"
+      iam_role_name: "{{GLUE_ROLE_NAME}}"
+      create_job_kwargs:
+        GlueVersion: "4.0"
+        NumberOfWorkers: 2
+        WorkerType: G.1X
+        Command:
+          Name: glueetl
+          ScriptLocation: "s3://{{S3_BUCKET_NAME}}/scripts/glue/nyc_raw_to_transform.py"
+          PythonVersion: "3"
+      script_args:
+        --dag_name: immersion_day_data_pipeline_yaml
+        --task_id: glue_job
+        --correlation_id: "{{ run_id }}"
+    
+    create_emr_serverless_app:
+      operator: airflow.providers.amazon.aws.operators.emr.EmrServerlessCreateApplicationOperator
+      dependencies:
+        - glue_job
+      release_label: emr-6.9.0
+      job_type: SPARK
+      config:
+        name: my-emr-serverless-app-yaml
+    
+    start_emr_serverless_job:
+      operator: airflow.providers.amazon.aws.operators.emr.EmrServerlessStartJobOperator
+      dependencies:
+        - create_emr_serverless_app
+      application_id: "{{ task_instance.xcom_pull('create_emr_serverless_app', key='return_value') }}"
+      execution_role_arn: "{{EMR_ROLE_ARN}}"
+      job_driver:
+        sparkSubmit:
+          entryPoint: "s3://{{S3_BUCKET_NAME}}/scripts/emr/nyc_aggregations.py"
+          entryPointArguments:
+            - "s3://{{S3_BUCKET_NAME}}/data/transformed/green"
+            - "s3://{{S3_BUCKET_NAME}}/data/aggregated/green"
+            - immersion_day_data_pipeline_yaml
+            - start_emr_serverless_job
+            - "{{ run_id }}"
+          sparkSubmitParameters: "--conf spark.executor.instances=2 --conf spark.executor.memory=4G --conf spark.executor.cores=2 --conf spark.executor.memoryOverhead=1G"
+      configuration_overrides:
+        monitoringConfiguration:
+          s3MonitoringConfiguration:
+            logUri: "s3://{{S3_BUCKET_NAME}}/logs/emr/data-pipeline/create_emr_cluster/"
+    
+    wait_for_emr_serverless_job:
+      operator: airflow.providers.amazon.aws.sensors.emr.EmrServerlessJobSensor
+      dependencies:
+        - start_emr_serverless_job
+      application_id: "{{ task_instance.xcom_pull('create_emr_serverless_app', key='return_value') }}"
+      job_run_id: "{{ task_instance.xcom_pull('start_emr_serverless_job', key='return_value') }}"
+    
+    delete_app:
+      operator: airflow.providers.amazon.aws.operators.emr.EmrServerlessDeleteApplicationOperator
+      dependencies:
+        - wait_for_emr_serverless_job
+      application_id: "{{ task_instance.xcom_pull('create_emr_serverless_app', key='return_value') }}"
+    
+    drop_redshift_table:
+      operator: airflow.providers.amazon.aws.operators.redshift_data.RedshiftDataOperator
+      dependencies:
+        - delete_app
+      database: dev
+      sql: "DROP TABLE IF EXISTS public.green;"
+      workgroup_name: "{{REDSHIFT_WORKGROUP}}"
+      wait_for_completion: true
+    
+    create_redshift_table:
+      operator: airflow.providers.amazon.aws.operators.redshift_data.RedshiftDataOperator
+      dependencies:
+        - drop_redshift_table
+      database: dev
+      sql: |
+        CREATE TABLE public.green (
+            pulocationid BIGINT,
+            trip_type BIGINT,
+            payment_type BIGINT,
+            total_fare_amount DOUBLE PRECISION
+        )
+        DISTSTYLE AUTO
+        SORTKEY (pulocationid);
+      workgroup_name: "{{REDSHIFT_WORKGROUP}}"
+      wait_for_completion: true
+    
+    copy_to_redshift:
+      operator: airflow.providers.amazon.aws.operators.redshift_data.RedshiftDataOperator
+      dependencies:
+        - create_redshift_table
+      database: dev
+      sql: |
+        COPY public.green
+        FROM 's3://{{S3_BUCKET_NAME}}/data/aggregated/green/'
+        IAM_ROLE '{{REDSHIFT_ROLE_ARN}}'
+        FORMAT AS PARQUET;
+      workgroup_name: "{{REDSHIFT_WORKGROUP}}"
+      wait_for_completion: true
