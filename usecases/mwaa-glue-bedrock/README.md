@@ -4,7 +4,7 @@
 ## Overview
 This project demonstrates how to optimize data integration workflows through [Amazon Managed Workflows for Apache Airflow (MWAA)](https://aws.amazon.com/mwaa/) by leveraging an event-driven architecture. The demonstration integrates [Amazon EventBridge](https://aws.amazon.com/eventbridge/) with Salesforce, consuming Salesforce platform events and publishing these as updates in Airflow Datasets via an [AWS Lambda](https://aws.amazon.com/lambda/) function. MWAA triggers a Directed Acyclic Graph (DAG) based on the event to process the data (a new support case).
 
-When a new case is created in Salesforce, MWAA will extract relevant information and use [Amazon Bedrock](https://aws.amazon.com/bedrock/) to suggest a resolution. MWAA then writes the data back to Salesforce via an [AWS Glue](https://aws.amazon.com/glue/) job, including Bedrock's suggestion in the case comments.
+When a new case is created in Salesforce, MWAA will extract relevant information and use [Amazon Bedrock](https://aws.amazon.com/bedrock/) to suggest a resolution. MWAA then writes the data back to Salesforce via an [AWS Glue](https://aws.amazon.com/glue/) job, including Bedrock's suggested solution in the case comments.
 
 ## Prerequisites
 1. **AWS Account**: You need an AWS user with sufficient privileges to create AWS resources, such as [AWS Secrets Manager](https://aws.amazon.com/secrets-manager/), [Amazon S3](https://aws.amazon.com/s3/), [IAM Roles and Policies](https://aws.amazon.com/iam/), [AWS Glue](https://aws.amazon.com/glue/) connections and jobs, and [Amazon MWAA](https://aws.amazon.com/mwaa/) environments.
