@@ -1,0 +1,161 @@
+{
+    "widgets": [
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 8,
+            "properties": {
+                "metrics": [
+                    [ { "expression": "SUM(SEARCH('MWAA/Serverless \"RunSuccess\"', 'Sum', 900))", "label": "RunSuccess", "region": "us-east-2", "stat": "Sum", "period": 900, "id": "m1" } ],
+                    [ { "expression": "SUM(SEARCH('MWAA/Serverless \"TotalRuns\"', 'Sum', 900))", "label": "TotalRuns", "region": "us-east-2", "stat": "Sum", "period": 900, "id": "m3", "visible": false } ],
+                    [ { "expression": "m3-m1-m2", "label": "Other", "region": "us-east-2", "stat": "Sum", "period": 900, "id": "m4", "visible": false } ],
+                    [ { "expression": "SUM(SEARCH('MWAA/Serverless \"RunFailed\"', 'Sum', 900))", "label": "RunFailed", "region": "us-east-2", "stat": "Sum", "period": 900, "id": "m2" } ]
+                ],
+                "view": "pie",
+                "stacked": false,
+                "region": "us-east-2",
+                "title": "Workflow Runs Summary",
+                "period": 900,
+                "yAxis": {
+                    "left": {
+                        "min": 0
+                    }
+                },
+                "liveData": false,
+                "stat": "Sum",
+                "setPeriodToTimeRange": true
+            }
+        },
+        {
+            "type": "metric",
+            "x": 6,
+            "y": 0,
+            "width": 12,
+            "height": 8,
+            "properties": {
+                "metrics": [
+                    [ { "expression": "SEARCH('MWAA/Serverless \"RunSuccess\"', 'Sum', 900)", "label": "", "region": "us-east-2", "stat": "Sum", "period": 900 } ],
+                    [ { "expression": "SEARCH('MWAA/Serverless \"RunFailed\"', 'Sum', 900)", "label": "", "region": "us-east-2", "stat": "Sum", "period": 900 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": true,
+                "region": "us-east-2",
+                "title": "Workflow Runs Timeline",
+                "period": 900,
+                "yAxis": {
+                    "left": {
+                        "min": 0
+                    }
+                },
+                "liveData": false,
+                "stat": "Sum",
+                "singleValueFullPrecision": false,
+                "setPeriodToTimeRange": true
+            }
+        },
+        {
+            "type": "metric",
+            "x": 18,
+            "y": 0,
+            "width": 6,
+            "height": 8,
+            "properties": {
+                "metrics": [
+                    [ { "expression": "SEARCH('MWAA/Serverless \"RunSuccess\"', 'Sum', 900)", "label": "", "region": "us-east-2", "stat": "Sum", "period": 900 } ],
+                    [ { "expression": "SEARCH('MWAA/Serverless \"RunFailed\"', 'Sum', 900)", "label": "", "region": "us-east-2", "stat": "Sum", "period": 900, "id": "m2" } ]
+                ],
+                "view": "bar",
+                "stacked": true,
+                "region": "us-east-2",
+                "title": "Workflow Runs Totals",
+                "period": 900,
+                "yAxis": {
+                    "left": {
+                        "min": 0
+                    }
+                },
+                "liveData": false,
+                "stat": "Sum",
+                "singleValueFullPrecision": false,
+                "setPeriodToTimeRange": true
+            }
+        },
+        {
+            "type": "metric",
+            "x": 0,
+            "y": 8,
+            "width": 6,
+            "height": 8,
+            "properties": {
+                "metrics": [
+                    [ { "expression": "SUM(SEARCH('MWAA/Serverless \"TaskSuccess\"', 'Sum', 900))", "label": "TaskSuccess", "region": "us-east-2", "stat": "Sum", "period": 900 } ],
+                    [ { "expression": "SUM(SEARCH('MWAA/Serverless \"TaskFailed\"', 'Sum', 900))", "label": "TaskFailed", "region": "us-east-2", "stat": "Sum", "period": 900, "id": "m2" } ]
+                ],
+                "view": "bar",
+                "stacked": false,
+                "region": "us-east-2",
+                "title": "Workflow Task Summary",
+                "period": 900,
+                "yAxis": {
+                    "left": {
+                        "min": 0
+                    }
+                },
+                "liveData": false,
+                "stat": "Sum"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 6,
+            "y": 8,
+            "width": 12,
+            "height": 8,
+            "properties": {
+                "metrics": [
+                    [ { "expression": "SEARCH('MWAA/Serverless \"TaskSuccess\"', 'Sum', 900)", "label": "TaskSuccess", "region": "us-east-2", "stat": "Sum", "period": 900 } ],
+                    [ { "expression": "SEARCH('MWAA/Serverless \"TaskFailed\"', 'Sum', 900)", "label": "TaskFailed", "region": "us-east-2", "stat": "Sum", "period": 900 } ]
+                ],
+                "view": "timeSeries",
+                "stacked": true,
+                "region": "us-east-2",
+                "title": "Workflow Task Timeline",
+                "period": 900,
+                "yAxis": {
+                    "left": {
+                        "min": 0
+                    }
+                },
+                "liveData": false,
+                "stat": "Sum"
+            }
+        },
+        {
+            "type": "metric",
+            "x": 18,
+            "y": 8,
+            "width": 6,
+            "height": 8,
+            "properties": {
+                "metrics": [
+                    [ { "expression": "SEARCH('MWAA/Serverless \"TaskSuccess\"', 'Sum', 900)", "label": "TaskSuccess", "region": "us-east-2", "stat": "Sum", "period": 900 } ],
+                    [ { "expression": "SEARCH('MWAA/Serverless \"TaskFailed\"', 'Sum', 900)", "label": "TaskFailed", "region": "us-east-2", "stat": "Sum", "period": 900 } ]
+                ],
+                "view": "bar",
+                "stacked": true,
+                "region": "us-east-2",
+                "title": "Workflow Task Totals",
+                "period": 900,
+                "yAxis": {
+                    "left": {
+                        "min": 0
+                    }
+                },
+                "liveData": false,
+                "stat": "Sum"
+            }
+        }
+    ]
+}

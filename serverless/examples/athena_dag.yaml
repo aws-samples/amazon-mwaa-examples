@@ -1,0 +1,124 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+athena_dag:
+  dag_id: athena_dag
+  params:
+    output_location: s3://amzn-s3-demo-bucket/athena-results/
+  schedule: None
+  tasks:
+    create_stack:
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      cloudformation_parameters:
+        StackName: covid-lake-stack
+        TemplateURL: https://covid19-lake.s3.us-east-2.amazonaws.com/cfn/CovidLakeStack.template.json
+        TimeoutInMinutes: 5
+        OnFailure: DELETE
+      stack_name: covid-lake-stack
+      task_id: create_stack
+      dependencies: []
+    wait_for_stack_create:
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: covid-lake-stack
+      task_id: wait_for_stack_create
+      dependencies:
+      - create_stack
+    query_1:
+      operator: airflow.providers.amazon.aws.operators.athena.AthenaOperator
+      database: default
+      output_location: '{{ params.output_location }}'
+      query: |
+        SELECT 
+          cases.fips, 
+          admin2 as county, 
+          province_state, 
+          confirmed,
+          growth_count, 
+          sum(num_licensed_beds) as num_licensed_beds, 
+          sum(num_staffed_beds) as num_staffed_beds, 
+          sum(num_icu_beds) as num_icu_beds
+        FROM 
+          "covid-19"."hospital_beds" beds, 
+          ( SELECT 
+              fips, 
+              admin2, 
+              province_state, 
+              confirmed, 
+              last_value(confirmed) over (partition by fips order by last_update) - first_value(confirmed) over (partition by fips order by last_update) as growth_count,
+              first_value(last_update) over (partition by fips order by last_update desc) as most_recent,
+              last_update
+            FROM  
+              "covid-19"."enigma_jhu" 
+            WHERE 
+              from_iso8601_timestamp(last_update) > now() - interval '200' day AND country_region = 'US') cases
+        WHERE 
+          beds.fips = cases.fips AND last_update = most_recent
+        GROUP BY cases.fips, confirmed, growth_count, admin2, province_state
+        ORDER BY growth_count desc
+      task_id: query_1
+      dependencies:
+      - wait_for_stack_create
+    query_2:
+      operator: airflow.providers.amazon.aws.operators.athena.AthenaOperator
+      database: default
+      output_location: '{{ params.output_location }}'
+      query: |
+        SELECT * FROM "covid-19"."world_cases_deaths_testing" order by "date" desc limit 10;
+      task_id: query_2
+      dependencies:
+      - wait_for_stack_create
+    query_3:
+      operator: airflow.providers.amazon.aws.operators.athena.AthenaOperator
+      database: default
+      output_location: '{{ params.output_location }}'
+      query: |
+        SELECT 
+          date,
+          positive,
+          negative,
+          pending,
+          hospitalized,
+          death,
+          total,
+          deathincrease,
+          hospitalizedincrease,
+          negativeincrease,
+          positiveincrease,
+          sta.state AS state_abbreviation,
+          abb.state 
+
+        FROM "covid-19"."covid_testing_states_daily" sta
+        JOIN "covid-19"."us_state_abbreviations" abb ON sta.state = abb.abbreviation
+        limit 500;
+      task_id: query_3
+      dependencies:
+      - wait_for_stack_create
+    delete_stack:
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      stack_name: covid-lake-stack
+      task_id: delete_stack
+      trigger_rule: all_done
+      dependencies:
+      - query_1
+      - query_3
+      - query_2
+    wait_for_stack_delete:
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: covid-lake-stack
+      task_id: wait_for_stack_delete
+      trigger_rule: all_success
+      dependencies:
+      - delete_stack
+
