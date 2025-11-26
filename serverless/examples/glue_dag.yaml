@@ -1,0 +1,89 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+glue_dag:
+  dag_id: glue_dag
+  params:
+    role_name: MyExecutionRole
+    script_bucket: amzn-s3-demo-bucket
+    script_key: scripts/glue-sample-job.py
+  default_args:
+    start_date: '2024-01-01'
+  schedule: None
+  tasks:
+    create_script:
+      operator: airflow.providers.amazon.aws.operators.s3.S3CreateObjectOperator
+      data: |
+        #!/usr/bin/env python3
+
+        import sys
+        from awsglue.transforms import *
+        from awsglue.utils import getResolvedOptions
+        from pyspark.context import SparkContext
+        from awsglue.context import GlueContext
+        from awsglue.job import Job
+        from pyspark.sql import SparkSession
+
+        # Initialize Glue job
+        args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+        sc = SparkContext()
+        glueContext = GlueContext(sc)
+        spark = glueContext.spark_session
+        job = Job(glueContext)
+        job.init(args['JOB_NAME'], args)
+
+        print("=== Glue 5.0 Job Started ===")
+        print(f"Python version: {sys.version}")
+        print(f"Spark version: {spark.version}")
+        print(f"Job name: {args['JOB_NAME']}")
+
+        # Create test DataFrame
+        data = [("test", 1, "success"), ("glue", 2, "running"), ("job", 3, "complete")]
+        columns = ["name", "id", "status"]
+        df = spark.createDataFrame(data, columns)
+
+        print("Created test DataFrame:")
+        df.show()
+
+        print("=== Glue 5.0 Job Completed Successfully ===")
+        job.commit()
+      replace: true
+      s3_bucket: '{{ params.script_bucket }}'
+      s3_key: '{{ params.script_key }}'
+      task_id: create_script
+    run_glue_job:
+      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+      concurrent_run_limit: 1
+      create_job_kwargs:
+        GlueVersion: '5.0'
+        Command:
+          Name: glueetl
+          ScriptLocation: s3://{{ params.script_bucket }}/{{ params.script_key }}
+          PythonVersion: '3'
+        DefaultArguments:
+          --job-language: python
+          --enable-metrics: ''
+          --enable-continuous-cloudwatch-log: 'true'
+        MaxRetries: 0
+        Timeout: 60
+      iam_role_name: '{{ params.role_name }}'
+      job_desc: AWS Glue Job with Airflow
+      job_name: glue5-python3-job-{{ ds_nodash }}
+      task_id: run_glue_job
+      wait_for_completion: true
+      dependencies:
+      - create_script
+
+
