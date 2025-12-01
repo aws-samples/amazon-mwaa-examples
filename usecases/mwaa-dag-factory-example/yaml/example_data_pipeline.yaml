@@ -1,0 +1,361 @@
+example_data_pipeline:
+  dag_id: example_data_pipeline
+  params: {}
+  default_args:
+    owner: airflow
+    retries: 0
+    retry_delay: 120
+    start_date: '2025-11-01'
+  schedule: None
+  tasks:
+    s3_sensor:
+      operator: airflow.providers.amazon.aws.sensors.s3.S3KeySensor
+      aws_conn_id: aws_default
+      bucket_key: data/raw/green*
+      bucket_name: mwaa-data-pipeline-workshop-mwaabucket-4xjyfgqfuol8
+      deferrable: false
+      metadata_keys:
+      - Size
+      - Key
+      mode: poke
+      outlets: []
+      params: {}
+      poke_interval: 60.0
+      priority_weight: 1
+      retries: 0
+      retry_delay:
+        __type__: datetime.timedelta
+        seconds: 120.0
+      retry_exponential_backoff: false
+      start_date:
+        __type__: datetime.datetime
+        year: 2025
+        month: 11
+        day: 1
+      task_id: s3_sensor
+      timeout: 604800.0
+      trigger_rule: all_success
+      use_regex: false
+      wait_for_downstream: false
+      wildcard_match: true
+      dependencies: []
+    glue_crawler:
+      operator: airflow.providers.amazon.aws.operators.glue_crawler.GlueCrawlerOperator
+      aws_conn_id: aws_default
+      config:
+        Name: airflow-workshop-raw-green-crawler
+        Role: arn:aws:iam::396913721676:role/mwaa-data-pipeline-workshop-GlueServiceRole-sUDazVykIPHw
+        DatabaseName: default
+        Targets:
+          S3Targets:
+          - Path: mwaa-data-pipeline-workshop-mwaabucket-4xjyfgqfuol8/data/raw/green
+      deferrable: false
+      outlets: []
+      params: {}
+      poll_interval: 5
+      priority_weight: 1
+      retries: 3
+      retry_delay:
+        __type__: datetime.timedelta
+        seconds: 120.0
+      retry_exponential_backoff: false
+      start_date:
+        __type__: datetime.datetime
+        year: 2025
+        month: 11
+        day: 1
+      task_id: glue_crawler
+      trigger_rule: all_success
+      wait_for_completion: true
+      wait_for_downstream: false
+      dependencies:
+      - s3_sensor
+    glue_job:
+      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+      aws_conn_id: aws_default
+      concurrent_run_limit: 1
+      create_job_kwargs:
+        GlueVersion: '4.0'
+        NumberOfWorkers: 2
+        WorkerType: G.1X
+        Command:
+          Name: glueetl
+          ScriptLocation: s3://mwaa-data-pipeline-workshop-mwaabucket-4xjyfgqfuol8/scripts/glue/nyc_raw_to_transform.py
+          PythonVersion: '3'
+      deferrable: false
+      iam_role_name: mwaa-data-pipeline-workshop-GlueServiceRole-sUDazVykIPHw
+      job_desc: AWS Glue Job with Airflow
+      job_name: nyc_raw_to_transform
+      job_poll_interval: 6
+      outlets: []
+      params: {}
+      priority_weight: 1
+      replace_script_file: false
+      retries: 0
+      retry_delay:
+        __type__: datetime.timedelta
+        seconds: 120.0
+      retry_exponential_backoff: false
+      retry_limit: 0
+      run_job_kwargs: {}
+      script_args:
+        --dag_name: immersion_day_data_pipeline
+        --task_id: glue_job
+        --correlation_id: 'immersion_day_data_pipeline'
+      script_location: s3://mwaa-data-pipeline-workshop-mwaabucket-4xjyfgqfuol8/scripts/glue/nyc_raw_to_transform.py
+      sleep_before_return: 0
+      start_date:
+        __type__: datetime.datetime
+        year: 2025
+        month: 11
+        day: 1
+      stop_job_run_on_kill: false
+      task_id: glue_job
+      trigger_rule: all_success
+      update_config: false
+      verbose: false
+      wait_for_completion: true
+      wait_for_downstream: false
+      waiter_delay: 60
+      waiter_max_attempts: 75
+      dependencies:
+      - glue_crawler
+    create_emr_serverless_app:
+      operator: airflow.providers.amazon.aws.operators.emr.EmrServerlessCreateApplicationOperator
+      aws_conn_id: aws_default
+      config:
+        name: emr-app-demo
+      deferrable: false
+      job_type: SPARK
+      outlets: []
+      params: {}
+      priority_weight: 1
+      release_label: emr-6.9.0
+      retries: 0
+      retry_delay:
+        __type__: datetime.timedelta
+        seconds: 120.0
+      retry_exponential_backoff: false
+      start_date:
+        __type__: datetime.datetime
+        year: 2025
+        month: 11
+        day: 1
+      task_id: create_emr_serverless_app
+      trigger_rule: all_success
+      wait_for_completion: true
+      wait_for_downstream: false
+      waiter_delay: 60
+      waiter_max_attempts: 25
+      dependencies:
+      - glue_job
+    start_emr_serverless_job:
+      operator: airflow.providers.amazon.aws.operators.emr.EmrServerlessStartJobOperator
+      application_id: "{{ task_instance.xcom_pull(task_ids='create_emr_serverless_app',\
+        \ key='return_value') }}"
+      aws_conn_id: aws_default
+      config: {}
+      configuration_overrides:
+        monitoringConfiguration:
+          s3MonitoringConfiguration:
+            logUri: s3://mwaa-data-pipeline-workshop-mwaabucket-4xjyfgqfuol8/logs/emr/data-pipeline/create_emr_cluster/
+      deferrable: false
+      enable_application_ui_links: false
+      execution_role_arn: arn:aws:iam::396913721676:role/mwaa-data-pipeline-workshop-EMRServerlessRole-F70dLM32OYDO
+      job_driver:
+        sparkSubmit:
+          entryPoint: s3://mwaa-data-pipeline-workshop-mwaabucket-4xjyfgqfuol8/scripts/emr/nyc_aggregations.py
+          entryPointArguments:
+          - s3://mwaa-data-pipeline-workshop-mwaabucket-4xjyfgqfuol8/data/transformed/green
+          - s3://mwaa-data-pipeline-workshop-mwaabucket-4xjyfgqfuol8/data/aggregated/green
+          - immersion_day_data_pipeline
+          - start_emr_serverless_job
+          - 'start_emr_serverless_job'
+          sparkSubmitParameters: --conf spark.executor.instances=2 --conf spark.executor.memory=4G
+            --conf spark.executor.cores=2 --conf spark.executor.memoryOverhead=1G
+      outlets: []
+      params: {}
+      priority_weight: 1
+      retries: 0
+      retry_delay:
+        __type__: datetime.timedelta
+        seconds: 120.0
+      retry_exponential_backoff: false
+      start_date:
+        __type__: datetime.datetime
+        year: 2025
+        month: 11
+        day: 1
+      task_id: start_emr_serverless_job
+      trigger_rule: all_success
+      wait_for_completion: true
+      wait_for_downstream: false
+      waiter_delay: 60
+      waiter_max_attempts: 25
+      dependencies:
+      - create_emr_serverless_app
+    wait_for_emr_serverless_job:
+      operator: airflow.providers.amazon.aws.sensors.emr.EmrServerlessJobSensor
+      application_id: "{{ task_instance.xcom_pull(task_ids='create_emr_serverless_app',\
+        \ key='return_value') }}"
+      aws_conn_id: aws_default
+      job_run_id: "{{ task_instance.xcom_pull(task_ids='start_emr_serverless_job',\
+        \ key='return_value') }}"
+      mode: poke
+      outlets: []
+      params: {}
+      poke_interval: 60.0
+      priority_weight: 1
+      retries: 0
+      retry_delay:
+        __type__: datetime.timedelta
+        seconds: 120.0
+      retry_exponential_backoff: false
+      start_date:
+        __type__: datetime.datetime
+        year: 2025
+        month: 11
+        day: 1
+      target_states: "frozenset({'SUCCESS'})"
+      task_id: wait_for_emr_serverless_job
+      timeout: 604800.0
+      trigger_rule: all_success
+      wait_for_downstream: false
+      dependencies:
+      - start_emr_serverless_job
+    delete_app:
+      operator: airflow.providers.amazon.aws.operators.emr.EmrServerlessDeleteApplicationOperator
+      application_id: "{{ task_instance.xcom_pull(task_ids='create_emr_serverless_app',\
+        \ key='return_value') }}"
+      aws_conn_id: aws_default
+      deferrable: false
+      force_stop: false
+      outlets: []
+      params: {}
+      priority_weight: 1
+      retries: 0
+      retry_delay:
+        __type__: datetime.timedelta
+        seconds: 120.0
+      retry_exponential_backoff: false
+      start_date:
+        __type__: datetime.datetime
+        year: 2025
+        month: 11
+        day: 1
+      task_id: delete_app
+      trigger_rule: all_success
+      wait_for_completion: true
+      wait_for_downstream: false
+      waiter_delay: 60
+      waiter_max_attempts: 25
+      dependencies:
+      - wait_for_emr_serverless_job
+    drop_redshift_table:
+      operator: airflow.providers.amazon.aws.operators.redshift_data.RedshiftDataOperator
+      aws_conn_id: aws_default
+      database: dev
+      deferrable: false
+      outlets: []
+      params: {}
+      poll_interval: 10
+      priority_weight: 1
+      region_name: us-east-2
+      retries: 0
+      retry_delay:
+        __type__: datetime.timedelta
+        seconds: 120.0
+      retry_exponential_backoff: false
+      return_sql_result: false
+      sql: DROP TABLE IF EXISTS public.green;
+      start_date:
+        __type__: datetime.datetime
+        year: 2025
+        month: 11
+        day: 1
+      task_id: drop_redshift_table
+      trigger_rule: all_success
+      wait_for_completion: true
+      wait_for_downstream: false
+      with_event: false
+      workgroup_name: mwaa-data-pipeline-workgroup
+      dependencies:
+      - delete_app
+    create_redshift_table:
+      operator: airflow.providers.amazon.aws.operators.redshift_data.RedshiftDataOperator
+      aws_conn_id: aws_default
+      database: dev
+      deferrable: false
+      outlets: []
+      params: {}
+      poll_interval: 10
+      priority_weight: 1
+      region_name: us-east-2
+      retries: 0
+      retry_delay:
+        __type__: datetime.timedelta
+        seconds: 120.0
+      retry_exponential_backoff: false
+      return_sql_result: false
+      sql: "\n        CREATE TABLE public.green (\n            pulocationid BIGINT,\n\
+        \            trip_type BIGINT,\n            payment_type BIGINT,\n       \
+        \     total_fare_amount DOUBLE PRECISION\n        )\n        DISTSTYLE AUTO\n\
+        \        SORTKEY (pulocationid);\n    "
+      start_date:
+        __type__: datetime.datetime
+        year: 2025
+        month: 11
+        day: 1
+      task_id: create_redshift_table
+      trigger_rule: all_success
+      wait_for_completion: true
+      wait_for_downstream: false
+      with_event: false
+      workgroup_name: mwaa-data-pipeline-workgroup
+      dependencies:
+      - drop_redshift_table
+    copy_to_redshift:
+      operator: airflow.providers.amazon.aws.operators.redshift_data.RedshiftDataOperator
+      aws_conn_id: aws_default
+      database: dev
+      deferrable: false
+      outlets: []
+      params: {}
+      poll_interval: 10
+      priority_weight: 1
+      region_name: us-east-2
+      retries: 0
+      retry_delay:
+        __type__: datetime.timedelta
+        seconds: 120.0
+      retry_exponential_backoff: false
+      return_sql_result: false
+      sql: "\n        COPY public.green\n        FROM 's3://mwaa-data-pipeline-workshop-mwaabucket-4xjyfgqfuol8/data/aggregated/green/'\n\
+        \        IAM_ROLE 'arn:aws:iam::396913721676:role/mwaa-data-pipeline-workshop-RedshiftRole-8xHaobgsAvLG'\n\
+        \        FORMAT AS PARQUET;\n    "
+      start_date:
+        __type__: datetime.datetime
+        year: 2025
+        month: 11
+        day: 1
+      task_id: copy_to_redshift
+      trigger_rule: all_success
+      wait_for_completion: true
+      wait_for_downstream: false
+      with_event: false
+      workgroup_name: mwaa-data-pipeline-workgroup
+      dependencies:
+      - create_redshift_table
+  auto_register: true
+  catchup: false
+  dag_display_name: example_data_pipeline
+  dagrun_timeout:
+    __type__: datetime.timedelta
+    seconds: 7200.0
+  max_active_runs: 16
+  max_active_tasks: 16
+  max_consecutive_failed_dag_runs: 0
+  owner_links: {}
+  render_template_as_native_obj: false
+  tags: []
+  template_undefined: jinja2.runtime.StrictUndefined

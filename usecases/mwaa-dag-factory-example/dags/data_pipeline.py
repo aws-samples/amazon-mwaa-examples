@@ -61,7 +61,7 @@ with DAG(
         script_args={
             '--dag_name': 'immersion_day_data_pipeline',
             '--task_id': 'glue_job',
-            '--correlation_id': '{{ run_id }}'
+            '--correlation_id': 'start_emr_serverless_job'
         }
     )
 
@@ -86,7 +86,7 @@ with DAG(
                     "s3://{{S3_BUCKET_NAME}}/data/aggregated/green",
                     "immersion_day_data_pipeline",
                     "start_emr_serverless_job",
-                    "{{ run_id }}"
+                    "start_emr_serverless_job"
                 ],
                 "sparkSubmitParameters": "--conf spark.executor.instances=2 --conf spark.executor.memory=4G --conf spark.executor.cores=2 --conf spark.executor.memoryOverhead=1G"
             }
