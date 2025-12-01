@@ -1,0 +1,27 @@
+# Ignore plugins directory (contains wheel files)
+plugins/
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ignore test files
+test_*.py
+*_test.py
+
+# Ignore documentation
+*.md
+README*
+
+# Ignore YAML output from converter (if stored in dags folder)
+converted/

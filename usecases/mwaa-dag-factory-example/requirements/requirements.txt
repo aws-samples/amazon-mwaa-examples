@@ -1,0 +1,2 @@
+apache-airflow-providers-amazon==9.15.0
+dag-factory==1.0.1
