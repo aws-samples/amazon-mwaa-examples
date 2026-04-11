@@ -25,7 +25,7 @@ rds_dag:
         TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  TestDB:\n\
           \    Type: AWS::RDS::DBInstance\n    Properties:\n      DBInstanceIdentifier:\
           \ mwaa-test-db\n      DBInstanceClass: db.t3.micro\n      Engine: mysql\n\
-          \      MasterUsername: admin\n      MasterUserPassword: TempPass123!\n \
+          \      MasterUsername: admin\n      MasterUserPassword: REPLACE_ME_SecurePassword1!\n \
           \     AllocatedStorage: '20'\n      BackupRetentionPeriod: 0\n      DeletionProtection:\
           \ false\nOutputs:\n  DBInstanceId:\n    Value: !Ref TestDB\n"
     wait_for_rds_stack:

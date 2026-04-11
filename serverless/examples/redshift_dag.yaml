@@ -27,7 +27,7 @@ redshift_dag:
         TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  RedshiftNamespace:\n\
           \    Type: AWS::RedshiftServerless::Namespace\n    Properties:\n      NamespaceName:\
           \ mwaa-test-ns\n      DbName: dev\n      AdminUsername: admin\n      AdminUserPassword:\
-          \ TempPass123!\n  RedshiftWorkgroup:\n    Type: AWS::RedshiftServerless::Workgroup\n\
+          \ REPLACE_ME_SecurePassword1!\n  RedshiftWorkgroup:\n    Type: AWS::RedshiftServerless::Workgroup\n\
           \    Properties:\n      WorkgroupName: mwaa-test-wg\n      NamespaceName:\
           \ !Ref RedshiftNamespace\n      BaseCapacity: 8\n      PubliclyAccessible:\
           \ false\nOutputs:\n  WorkgroupName:\n    Value: mwaa-test-wg\n"
