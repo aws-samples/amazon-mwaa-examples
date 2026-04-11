@@ -1,0 +1,113 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+combo_sns_sqs:
+  schedule: None
+  tasks:
+    sns_create_sns_stack:
+      task_id: sns_create_sns_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.sns_stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.sns_stack_name }}'
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nParameters:\n  TopicName:\n\
+          \    Type: String\n    Default: mwaa-test-sns-topic\nResources:\n  TestTopic:\n\
+          \    Type: AWS::SNS::Topic\n    Properties:\n      TopicName: !Ref TopicName\n\
+          Outputs:\n  TopicArn:\n    Value: !Ref TestTopic\n"
+        Parameters:
+        - ParameterKey: TopicName
+          ParameterValue: '{{ params.sns_topic_name }}'
+    sns_wait_for_sns_stack:
+      task_id: sns_wait_for_sns_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.sns_stack_name }}'
+      dependencies:
+      - sns_create_sns_stack
+    sns_publish_message:
+      task_id: sns_publish_message
+      operator: airflow.providers.amazon.aws.operators.sns.SnsPublishOperator
+      target_arn: '{{ ti.xcom_pull(task_ids=''create_sns_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      message: Hello from MWAA Serverless test
+      dependencies:
+      - sns_wait_for_sns_stack
+    sns_delete_sns_stack:
+      task_id: sns_delete_sns_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.sns_stack_name }}'
+      dependencies:
+      - sns_publish_message
+    sns_wait_for_sns_delete:
+      task_id: sns_wait_for_sns_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.sns_stack_name }}'
+      dependencies:
+      - sns_delete_sns_stack
+    sqs_create_sqs_stack:
+      task_id: sqs_create_sqs_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.sqs_stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.sqs_stack_name }}'
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nParameters:\n  QueueName:\n\
+          \    Type: String\n    Default: mwaa-test-sqs-queue\nResources:\n  TestQueue:\n\
+          \    Type: AWS::SQS::Queue\n    Properties:\n      QueueName: !Ref QueueName\n\
+          Outputs:\n  QueueUrl:\n    Value: !Ref TestQueue\n"
+        Parameters:
+        - ParameterKey: QueueName
+          ParameterValue: '{{ params.sqs_queue_name }}'
+      dependencies:
+      - sns_publish_message
+    sqs_wait_for_sqs_stack:
+      task_id: sqs_wait_for_sqs_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.sqs_stack_name }}'
+      dependencies:
+      - sqs_create_sqs_stack
+    sqs_publish_message:
+      task_id: sqs_publish_message
+      operator: airflow.providers.amazon.aws.operators.sqs.SqsPublishOperator
+      sqs_queue: '{{ ti.xcom_pull(task_ids=''create_sqs_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      message_content: '{"event": "workflow_started"}'
+      dependencies:
+      - sqs_wait_for_sqs_stack
+    sqs_wait_for_message:
+      task_id: sqs_wait_for_message
+      operator: airflow.providers.amazon.aws.sensors.sqs.SqsSensor
+      sqs_queue: '{{ ti.xcom_pull(task_ids=''create_sqs_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      dependencies:
+      - sqs_publish_message
+    sqs_delete_sqs_stack:
+      task_id: sqs_delete_sqs_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.sqs_stack_name }}'
+      dependencies:
+      - sqs_wait_for_message
+    sqs_wait_for_sqs_delete:
+      task_id: sqs_wait_for_sqs_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.sqs_stack_name }}'
+      dependencies:
+      - sqs_delete_sqs_stack
+  description: 'SNS + SQS: publish to topic then send to queue'
+  params:
+    sns_topic_name: mwaa-test-sns-topic
+    sns_stack_name: mwaa-test-sns-stack
+    sqs_queue_name: mwaa-test-sqs-queue
+    sqs_stack_name: mwaa-test-sqs-stack

@@ -1,0 +1,62 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+sns_dag:
+  schedule: None
+  tasks:
+    create_sns_stack:
+      task_id: create_sns_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.stack_name }}'
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nParameters:\n  TopicName:\n\
+          \    Type: String\n    Default: mwaa-test-sns-topic\nResources:\n  TestTopic:\n\
+          \    Type: AWS::SNS::Topic\n    Properties:\n      TopicName: !Ref TopicName\n\
+          Outputs:\n  TopicArn:\n    Value: !Ref TestTopic\n"
+        Parameters:
+        - ParameterKey: TopicName
+          ParameterValue: '{{ params.topic_name }}'
+    wait_for_sns_stack:
+      task_id: wait_for_sns_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - create_sns_stack
+    publish_message:
+      task_id: publish_message
+      operator: airflow.providers.amazon.aws.operators.sns.SnsPublishOperator
+      target_arn: '{{ ti.xcom_pull(task_ids=''create_sns_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      message: Hello from MWAA Serverless test
+      dependencies:
+      - wait_for_sns_stack
+    delete_sns_stack:
+      task_id: delete_sns_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - publish_message
+    wait_for_sns_delete:
+      task_id: wait_for_sns_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_sns_stack
+  description: MWAA Serverless Sns example DAG
+  params:
+    topic_name: mwaa-test-sns-topic
+    stack_name: mwaa-test-sns-stack

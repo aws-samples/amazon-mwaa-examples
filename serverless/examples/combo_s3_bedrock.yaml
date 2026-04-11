@@ -13,57 +13,67 @@
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-s3_dag:
+combo_s3_bedrock:
   schedule: None
   tasks:
-    create_test_bucket:
+    s3_create_test_bucket:
       operator: airflow.providers.amazon.aws.operators.s3.S3CreateBucketOperator
       bucket_name: test-bucket-{{ ds_nodash }}
-      task_id: create_test_bucket
-    create_test_object:
+      task_id: s3_create_test_bucket
+    s3_create_test_object:
       operator: airflow.providers.amazon.aws.operators.s3.S3CreateObjectOperator
       data: Hello World
       s3_bucket: test-bucket-{{ ds_nodash }}
       s3_key: test-file.txt
-      task_id: create_test_object
+      task_id: s3_create_test_object
       replace: true
       dependencies:
-      - create_test_bucket
-    wait_for_key:
+      - s3_create_test_bucket
+    s3_wait_for_key:
       operator: airflow.providers.amazon.aws.sensors.s3.S3KeySensor
       bucket_key: test-file.txt
       bucket_name: test-bucket-{{ ds_nodash }}
-      task_id: wait_for_key
+      task_id: s3_wait_for_key
       use_regex: false
       wildcard_match: false
       dependencies:
-      - create_test_object
-    list_objects:
+      - s3_create_test_object
+    s3_list_objects:
       operator: airflow.providers.amazon.aws.operators.s3.S3ListOperator
       apply_wildcard: false
       bucket: test-bucket-{{ ds_nodash }}
       delimiter: ''
-      task_id: list_objects
+      task_id: s3_list_objects
       dependencies:
-      - wait_for_key
-    delete_objects:
+      - s3_wait_for_key
+    s3_delete_objects:
       operator: airflow.providers.amazon.aws.operators.s3.S3DeleteObjectsOperator
       bucket: test-bucket-{{ ds_nodash }}
       keys:
       - test-file.txt
-      task_id: delete_objects
+      task_id: s3_delete_objects
       dependencies:
-      - list_objects
-    delete_test_bucket:
+      - s3_list_objects
+    s3_delete_test_bucket:
       operator: airflow.providers.amazon.aws.operators.s3.S3DeleteBucketOperator
       aws_conn_id: aws_default
       bucket_name: test-bucket-{{ ds_nodash }}
       force_delete: true
-      task_id: delete_test_bucket
+      task_id: s3_delete_test_bucket
       trigger_rule: all_done
       dependencies:
-      - delete_objects
-  dag_id: s3_dag
-  default_args:
-    start_date: '2024-01-01'
-  description: MWAA Serverless S3 example DAG
+      - s3_delete_objects
+    bedrock_invoke_model:
+      task_id: bedrock_invoke_model
+      operator: airflow.providers.amazon.aws.operators.bedrock.BedrockInvokeModelOperator
+      model_id: '{{ params.bedrock_model_id }}'
+      input_data:
+        messages:
+        - role: user
+          content:
+          - text: What is Amazon MWAA?
+      dependencies:
+      - s3_delete_objects
+  description: 'S3 + Bedrock: store data then invoke model'
+  params:
+    bedrock_model_id: amazon.nova-lite-v1:0

@@ -1,0 +1,71 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+quicksight_dag:
+  schedule: None
+  tasks:
+    create_quicksight_stack:
+      task_id: create_quicksight_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.stack_name }}'
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  DataSource:\n\
+          \    Type: AWS::QuickSight::DataSource\n    Properties:\n      AwsAccountId:\
+          \ !Ref AWS::AccountId\n      DataSourceId: mwaa-test-datasource\n      Name:\
+          \ mwaa-test-datasource\n      Type: S3\n  DataSet:\n    Type: AWS::QuickSight::DataSet\n\
+          \    Properties:\n      AwsAccountId: !Ref AWS::AccountId\n      DataSetId:\
+          \ mwaa-test-dataset\n      Name: mwaa-test-dataset\n      ImportMode: SPICE\n\
+          \      PhysicalTableMap:\n        PhysicalTable1:\n          CustomSql:\n\
+          \            DataSourceArn: !GetAtt DataSource.Arn\n            Name: test\n\
+          \            SqlQuery: SELECT 1 as id\n            Columns:\n          \
+          \    - Name: id\n                Type: INTEGER\nOutputs:\n  DataSetId:\n\
+          \    Value: mwaa-test-dataset\n"
+    wait_for_quicksight_stack:
+      task_id: wait_for_quicksight_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - create_quicksight_stack
+    create_ingestion:
+      task_id: create_ingestion
+      operator: airflow.providers.amazon.aws.operators.quicksight.QuickSightCreateIngestionOperator
+      data_set_id: mwaa-test-dataset
+      ingestion_id: ingestion-{{ ds_nodash }}
+      dependencies:
+      - wait_for_quicksight_stack
+    wait_for_ingestion:
+      task_id: wait_for_ingestion
+      operator: airflow.providers.amazon.aws.sensors.quicksight.QuickSightSensor
+      data_set_id: mwaa-test-dataset
+      ingestion_id: ingestion-{{ ds_nodash }}
+      dependencies:
+      - create_ingestion
+    delete_quicksight_stack:
+      task_id: delete_quicksight_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - wait_for_ingestion
+    wait_for_quicksight_delete:
+      task_id: wait_for_quicksight_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_quicksight_stack
+  description: MWAA Serverless Quicksight example DAG
+  params:
+    stack_name: mwaa-test-quicksight-stack

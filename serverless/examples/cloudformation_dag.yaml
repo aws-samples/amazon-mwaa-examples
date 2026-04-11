@@ -1,0 +1,48 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+cloudformation_dag:
+  schedule: None
+  tasks:
+    create_stack:
+      task_id: create_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.stack_name }}'
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nDescription: Sample\
+          \ stack\nResources:\n  Placeholder:\n    Type: AWS::CloudFormation::WaitConditionHandle\n"
+    wait_for_create:
+      task_id: wait_for_create
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - create_stack
+    delete_stack:
+      task_id: delete_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - wait_for_create
+    wait_for_delete:
+      task_id: wait_for_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_stack
+  description: MWAA Serverless Cloudformation example DAG
+  params:
+    stack_name: my-cfn-stack

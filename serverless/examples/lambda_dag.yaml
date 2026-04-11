@@ -1,0 +1,72 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+lambda_dag:
+  schedule: None
+  tasks:
+    create_lambda_stack:
+      task_id: create_lambda_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.stack_name }}'
+        Capabilities:
+        - CAPABILITY_IAM
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  LambdaRole:\n\
+          \    Type: AWS::IAM::Role\n    Properties:\n      AssumeRolePolicyDocument:\n\
+          \        Version: '2012-10-17'\n        Statement:\n          - Effect:\
+          \ Allow\n            Principal:\n              Service: lambda.amazonaws.com\n\
+          \            Action: sts:AssumeRole\n      ManagedPolicyArns:\n        -\
+          \ arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole\n  TestFunction:\n\
+          \    Type: AWS::Lambda::Function\n    Properties:\n      FunctionName: !Ref\
+          \ FunctionName\n      Runtime: python3.12\n      Handler: index.handler\n\
+          \      Role: !GetAtt LambdaRole.Arn\n      Code:\n        ZipFile: |\n \
+          \         def handler(event, context):\n              return {'statusCode':\
+          \ 200, 'body': 'Hello from MWAA Serverless test'}\nParameters:\n  FunctionName:\n\
+          \    Type: String\n    Default: mwaa-test-lambda\nOutputs:\n  FunctionName:\n\
+          \    Value: !Ref TestFunction\n"
+        Parameters:
+        - ParameterKey: FunctionName
+          ParameterValue: '{{ params.function_name }}'
+    wait_for_lambda_stack:
+      task_id: wait_for_lambda_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - create_lambda_stack
+    invoke_function:
+      task_id: invoke_function
+      operator: airflow.providers.amazon.aws.operators.lambda_function.LambdaInvokeFunctionOperator
+      function_name: '{{ params.function_name }}'
+      payload: '{"action": "test"}'
+      dependencies:
+      - wait_for_lambda_stack
+    delete_lambda_stack:
+      task_id: delete_lambda_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - invoke_function
+    wait_for_lambda_delete:
+      task_id: wait_for_lambda_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_lambda_stack
+  description: MWAA Serverless Lambda example DAG
+  params:
+    function_name: mwaa-test-lambda
+    stack_name: mwaa-test-lambda-stack

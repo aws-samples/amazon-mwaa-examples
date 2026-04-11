@@ -14,55 +14,97 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 glue_dag:
-  dag_id: glue_dag
-  params:
-    role_name: MyExecutionRole
-    script_bucket: amzn-s3-demo-bucket
-    script_key: scripts/glue-sample-job.py
-  default_args:
-    start_date: '2024-01-01'
   schedule: None
   tasks:
+    create_glue_stack:
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.stack_name }}'
+        Capabilities:
+        - CAPABILITY_IAM
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  ScriptBucket:\n\
+          \    Type: AWS::S3::Bucket\n  GlueRole:\n    Type: AWS::IAM::Role\n    Properties:\n\
+          \      AssumeRolePolicyDocument:\n        Version: '2012-10-17'\n      \
+          \  Statement:\n          - Effect: Allow\n            Principal:\n     \
+          \         Service: glue.amazonaws.com\n            Action: sts:AssumeRole\n\
+          \      ManagedPolicyArns:\n        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole\n\
+          \      Policies:\n        - PolicyName: S3Access\n          PolicyDocument:\n\
+          \            Version: '2012-10-17'\n            Statement:\n           \
+          \   - Effect: Allow\n                Action: s3:*\n                Resource:\
+          \ '*'\nOutputs:\n  BucketName:\n    Value: !Ref ScriptBucket\n  RoleName:\n\
+          \    Value: !Ref GlueRole\n"
+      task_id: create_glue_stack
+    wait_for_glue_stack:
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.stack_name }}'
+      task_id: wait_for_glue_stack
+      dependencies:
+      - create_glue_stack
     create_script:
       operator: airflow.providers.amazon.aws.operators.s3.S3CreateObjectOperator
-      data: |
-        #!/usr/bin/env python3
+      data: '#!/usr/bin/env python3
 
         import sys
+
         from awsglue.transforms import *
+
         from awsglue.utils import getResolvedOptions
+
         from pyspark.context import SparkContext
+
         from awsglue.context import GlueContext
+
         from awsglue.job import Job
+
         from pyspark.sql import SparkSession
 
-        # Initialize Glue job
-        args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+
+        args = getResolvedOptions(sys.argv, [''JOB_NAME''])
+
         sc = SparkContext()
+
         glueContext = GlueContext(sc)
+
         spark = glueContext.spark_session
+
         job = Job(glueContext)
-        job.init(args['JOB_NAME'], args)
+
+        job.init(args[''JOB_NAME''], args)
+
 
         print("=== Glue 5.0 Job Started ===")
-        print(f"Python version: {sys.version}")
-        print(f"Spark version: {spark.version}")
-        print(f"Job name: {args['JOB_NAME']}")
 
-        # Create test DataFrame
+        print(f"Python version: {sys.version}")
+
+        print(f"Spark version: {spark.version}")
+
+        print(f"Job name: {args[''JOB_NAME'']}")
+
+
         data = [("test", 1, "success"), ("glue", 2, "running"), ("job", 3, "complete")]
+
         columns = ["name", "id", "status"]
+
         df = spark.createDataFrame(data, columns)
 
         print("Created test DataFrame:")
+
         df.show()
 
+
         print("=== Glue 5.0 Job Completed Successfully ===")
+
         job.commit()
+
+        '
       replace: true
-      s3_bucket: '{{ params.script_bucket }}'
+      s3_bucket: '{{ ti.xcom_pull(task_ids=''create_glue_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
       s3_key: '{{ params.script_key }}'
       task_id: create_script
+      dependencies:
+      - wait_for_glue_stack
     run_glue_job:
       operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
       concurrent_run_limit: 1
@@ -70,7 +112,8 @@ glue_dag:
         GlueVersion: '5.0'
         Command:
           Name: glueetl
-          ScriptLocation: s3://{{ params.script_bucket }}/{{ params.script_key }}
+          ScriptLocation: s3://{{ ti.xcom_pull(task_ids='create_glue_stack')['CreateStackResponse']['Outputs'][0]['OutputValue']
+            }}/{{ params.script_key }}
           PythonVersion: '3'
         DefaultArguments:
           --job-language: python
@@ -78,12 +121,31 @@ glue_dag:
           --enable-continuous-cloudwatch-log: 'true'
         MaxRetries: 0
         Timeout: 60
-      iam_role_name: '{{ params.role_name }}'
+      iam_role_name: '{{ ti.xcom_pull(task_ids=''create_glue_stack'')[''CreateStackResponse''][''Outputs''][1][''OutputValue'']
+        }}'
       job_desc: AWS Glue Job with Airflow
       job_name: glue5-python3-job-{{ ds_nodash }}
       task_id: run_glue_job
       wait_for_completion: true
       dependencies:
       - create_script
-
-
+    delete_glue_stack:
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      stack_name: '{{ params.stack_name }}'
+      task_id: delete_glue_stack
+      trigger_rule: all_done
+      dependencies:
+      - run_glue_job
+    wait_for_glue_delete:
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.stack_name }}'
+      task_id: wait_for_glue_delete
+      dependencies:
+      - delete_glue_stack
+  dag_id: glue_dag
+  default_args:
+    start_date: '2024-01-01'
+  description: MWAA Serverless Glue example DAG
+  params:
+    stack_name: mwaa-test-glue-stack
+    script_key: scripts/glue-sample-job.py

@@ -1,0 +1,85 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+ecs_dag:
+  schedule: None
+  tasks:
+    create_ecs_stack:
+      task_id: create_ecs_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.stack_name }}'
+        Capabilities:
+        - CAPABILITY_IAM
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  VPC:\n\
+          \    Type: AWS::EC2::VPC\n    Properties:\n      CidrBlock: 10.0.0.0/16\n\
+          \      EnableDnsSupport: true\n      EnableDnsHostnames: true\n  PublicSubnet:\n\
+          \    Type: AWS::EC2::Subnet\n    Properties:\n      VpcId: !Ref VPC\n  \
+          \    CidrBlock: 10.0.1.0/24\n      MapPublicIpOnLaunch: true\n  IGW:\n \
+          \   Type: AWS::EC2::InternetGateway\n  AttachIGW:\n    Type: AWS::EC2::VPCGatewayAttachment\n\
+          \    Properties:\n      VpcId: !Ref VPC\n      InternetGatewayId: !Ref IGW\n\
+          \  EcsCluster:\n    Type: AWS::ECS::Cluster\n    Properties:\n      ClusterName:\
+          \ mwaa-test-ecs-cluster\n  TaskRole:\n    Type: AWS::IAM::Role\n    Properties:\n\
+          \      AssumeRolePolicyDocument:\n        Version: '2012-10-17'\n      \
+          \  Statement:\n          - Effect: Allow\n            Principal:\n     \
+          \         Service: ecs-tasks.amazonaws.com\n            Action: sts:AssumeRole\n\
+          \      ManagedPolicyArns:\n        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy\n\
+          \  TaskDef:\n    Type: AWS::ECS::TaskDefinition\n    Properties:\n     \
+          \ Family: mwaa-test-task\n      Cpu: '256'\n      Memory: '512'\n      NetworkMode:\
+          \ awsvpc\n      RequiresCompatibilities:\n        - FARGATE\n      ExecutionRoleArn:\
+          \ !GetAtt TaskRole.Arn\n      ContainerDefinitions:\n        - Name: test-container\n\
+          \          Image: public.ecr.aws/amazonlinux/amazonlinux:2023\n        \
+          \  Command:\n            - echo\n            - Hello from MWAA Serverless\
+          \ ECS test\n          Essential: true\nOutputs:\n  ClusterName:\n    Value:\
+          \ !Ref EcsCluster\n  TaskDefArn:\n    Value: !Ref TaskDef\n  SubnetId:\n\
+          \    Value: !Ref PublicSubnet\n"
+    wait_for_ecs_stack:
+      task_id: wait_for_ecs_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - create_ecs_stack
+    run_task:
+      task_id: run_task
+      operator: airflow.providers.amazon.aws.operators.ecs.EcsRunTaskOperator
+      cluster: mwaa-test-ecs-cluster
+      task_definition: mwaa-test-task
+      launch_type: FARGATE
+      overrides: {}
+      network_configuration:
+        awsvpcConfiguration:
+          subnets:
+          - '{{ ti.xcom_pull(task_ids=''create_ecs_stack'')[''CreateStackResponse''][''Outputs''][2][''OutputValue'']
+            }}'
+          assignPublicIp: ENABLED
+      dependencies:
+      - wait_for_ecs_stack
+    delete_ecs_stack:
+      task_id: delete_ecs_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - run_task
+    wait_for_ecs_delete:
+      task_id: wait_for_ecs_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_ecs_stack
+  description: MWAA Serverless Ecs example DAG
+  params:
+    stack_name: mwaa-test-ecs-stack

@@ -1,0 +1,65 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+redshift_dag:
+  schedule: None
+  tasks:
+    create_redshift_stack:
+      task_id: create_redshift_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.stack_name }}'
+        Capabilities:
+        - CAPABILITY_IAM
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  RedshiftNamespace:\n\
+          \    Type: AWS::RedshiftServerless::Namespace\n    Properties:\n      NamespaceName:\
+          \ mwaa-test-ns\n      DbName: dev\n      AdminUsername: admin\n      AdminUserPassword:\
+          \ TempPass123!\n  RedshiftWorkgroup:\n    Type: AWS::RedshiftServerless::Workgroup\n\
+          \    Properties:\n      WorkgroupName: mwaa-test-wg\n      NamespaceName:\
+          \ !Ref RedshiftNamespace\n      BaseCapacity: 8\n      PubliclyAccessible:\
+          \ false\nOutputs:\n  WorkgroupName:\n    Value: mwaa-test-wg\n"
+    wait_for_redshift_stack:
+      task_id: wait_for_redshift_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - create_redshift_stack
+    run_query:
+      task_id: run_query
+      operator: airflow.providers.amazon.aws.operators.redshift_data.RedshiftDataOperator
+      sql: SELECT 1;
+      database: '{{ params.database }}'
+      workgroup_name: mwaa-test-wg
+      wait_for_completion: true
+      dependencies:
+      - wait_for_redshift_stack
+    delete_redshift_stack:
+      task_id: delete_redshift_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - run_query
+    wait_for_redshift_delete:
+      task_id: wait_for_redshift_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_redshift_stack
+  description: MWAA Serverless Redshift example DAG
+  params:
+    database: dev
+    stack_name: mwaa-test-redshift-stack

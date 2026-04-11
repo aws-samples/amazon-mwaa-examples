@@ -1,0 +1,168 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+combo_cfn_ec2_rds:
+  schedule: None
+  tasks:
+    cfn_create_stack:
+      task_id: cfn_create_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.cfn_stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.cfn_stack_name }}'
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nDescription: Sample\
+          \ stack\nResources:\n  Placeholder:\n    Type: AWS::CloudFormation::WaitConditionHandle\n"
+    cfn_wait_for_create:
+      task_id: cfn_wait_for_create
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.cfn_stack_name }}'
+      dependencies:
+      - cfn_create_stack
+    cfn_delete_stack:
+      task_id: cfn_delete_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.cfn_stack_name }}'
+      dependencies:
+      - cfn_wait_for_create
+    cfn_wait_for_delete:
+      task_id: cfn_wait_for_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.cfn_stack_name }}'
+      dependencies:
+      - cfn_delete_stack
+    ec2_create_ec2_stack:
+      task_id: ec2_create_ec2_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.ec2_stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.ec2_stack_name }}'
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  TestInstance:\n\
+          \    Type: AWS::EC2::Instance\n    Properties:\n      InstanceType: t3.micro\n\
+          \      ImageId: resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64\n\
+          Outputs:\n  InstanceId:\n    Value: !Ref TestInstance\n"
+      dependencies:
+      - cfn_wait_for_create
+    ec2_wait_for_ec2_stack:
+      task_id: ec2_wait_for_ec2_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.ec2_stack_name }}'
+      dependencies:
+      - ec2_create_ec2_stack
+    ec2_stop_instance:
+      task_id: ec2_stop_instance
+      operator: airflow.providers.amazon.aws.operators.ec2.EC2StopInstanceOperator
+      instance_id: '{{ ti.xcom_pull(task_ids=''create_ec2_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      dependencies:
+      - ec2_wait_for_ec2_stack
+    ec2_wait_for_stopped:
+      task_id: ec2_wait_for_stopped
+      operator: airflow.providers.amazon.aws.sensors.ec2.EC2InstanceStateSensor
+      instance_id: '{{ ti.xcom_pull(task_ids=''create_ec2_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      target_state: stopped
+      dependencies:
+      - ec2_stop_instance
+    ec2_start_instance:
+      task_id: ec2_start_instance
+      operator: airflow.providers.amazon.aws.operators.ec2.EC2StartInstanceOperator
+      instance_id: '{{ ti.xcom_pull(task_ids=''create_ec2_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      dependencies:
+      - ec2_wait_for_stopped
+    ec2_wait_for_running:
+      task_id: ec2_wait_for_running
+      operator: airflow.providers.amazon.aws.sensors.ec2.EC2InstanceStateSensor
+      instance_id: '{{ ti.xcom_pull(task_ids=''create_ec2_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      target_state: running
+      dependencies:
+      - ec2_start_instance
+    ec2_delete_ec2_stack:
+      task_id: ec2_delete_ec2_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.ec2_stack_name }}'
+      dependencies:
+      - ec2_wait_for_running
+    ec2_wait_for_ec2_delete:
+      task_id: ec2_wait_for_ec2_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.ec2_stack_name }}'
+      dependencies:
+      - ec2_delete_ec2_stack
+    rds_create_rds_stack:
+      task_id: rds_create_rds_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.rds_stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.rds_stack_name }}'
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  TestDB:\n\
+          \    Type: AWS::RDS::DBInstance\n    Properties:\n      DBInstanceIdentifier:\
+          \ mwaa-test-db\n      DBInstanceClass: db.t3.micro\n      Engine: mysql\n\
+          \      MasterUsername: admin\n      MasterUserPassword: TempPass123!\n \
+          \     AllocatedStorage: '20'\n      BackupRetentionPeriod: 0\n      DeletionProtection:\
+          \ false\nOutputs:\n  DBInstanceId:\n    Value: !Ref TestDB\n"
+      dependencies:
+      - ec2_wait_for_running
+    rds_wait_for_rds_stack:
+      task_id: rds_wait_for_rds_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.rds_stack_name }}'
+      dependencies:
+      - rds_create_rds_stack
+    rds_create_snapshot:
+      task_id: rds_create_snapshot
+      operator: airflow.providers.amazon.aws.operators.rds.RdsCreateDbSnapshotOperator
+      db_type: instance
+      db_identifier: mwaa-test-db
+      db_snapshot_identifier: snapshot-{{ ds_nodash }}
+      dependencies:
+      - rds_wait_for_rds_stack
+    rds_wait_for_snapshot:
+      task_id: rds_wait_for_snapshot
+      operator: airflow.providers.amazon.aws.sensors.rds.RdsSnapshotExistenceSensor
+      db_type: instance
+      db_snapshot_identifier: snapshot-{{ ds_nodash }}
+      dependencies:
+      - rds_create_snapshot
+    rds_delete_snapshot:
+      task_id: rds_delete_snapshot
+      operator: airflow.providers.amazon.aws.operators.rds.RdsDeleteDbSnapshotOperator
+      trigger_rule: all_done
+      db_type: instance
+      db_snapshot_identifier: snapshot-{{ ds_nodash }}
+      dependencies:
+      - rds_wait_for_snapshot
+    rds_delete_rds_stack:
+      task_id: rds_delete_rds_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.rds_stack_name }}'
+      dependencies:
+      - rds_delete_snapshot
+    rds_wait_for_rds_delete:
+      task_id: rds_wait_for_rds_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.rds_stack_name }}'
+      dependencies:
+      - rds_delete_rds_stack
+  description: 'CloudFormation + EC2 + RDS: provision infrastructure, manage instances,
+    snapshot database'
+  params:
+    cfn_stack_name: my-cfn-stack
+    ec2_stack_name: mwaa-test-ec2-stack
+    rds_stack_name: mwaa-test-rds-stack

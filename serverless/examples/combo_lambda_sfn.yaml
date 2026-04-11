@@ -1,0 +1,132 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+combo_lambda_sfn:
+  schedule: None
+  tasks:
+    lam_create_lambda_stack:
+      task_id: lam_create_lambda_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.lam_stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.lam_stack_name }}'
+        Capabilities:
+        - CAPABILITY_IAM
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  LambdaRole:\n\
+          \    Type: AWS::IAM::Role\n    Properties:\n      AssumeRolePolicyDocument:\n\
+          \        Version: '2012-10-17'\n        Statement:\n          - Effect:\
+          \ Allow\n            Principal:\n              Service: lambda.amazonaws.com\n\
+          \            Action: sts:AssumeRole\n      ManagedPolicyArns:\n        -\
+          \ arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole\n  TestFunction:\n\
+          \    Type: AWS::Lambda::Function\n    Properties:\n      FunctionName: !Ref\
+          \ FunctionName\n      Runtime: python3.12\n      Handler: index.handler\n\
+          \      Role: !GetAtt LambdaRole.Arn\n      Code:\n        ZipFile: |\n \
+          \         def handler(event, context):\n              return {'statusCode':\
+          \ 200, 'body': 'Hello from MWAA Serverless test'}\nParameters:\n  FunctionName:\n\
+          \    Type: String\n    Default: mwaa-test-lambda\nOutputs:\n  FunctionName:\n\
+          \    Value: !Ref TestFunction\n"
+        Parameters:
+        - ParameterKey: FunctionName
+          ParameterValue: '{{ params.lam_function_name }}'
+    lam_wait_for_lambda_stack:
+      task_id: lam_wait_for_lambda_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.lam_stack_name }}'
+      dependencies:
+      - lam_create_lambda_stack
+    lam_invoke_function:
+      task_id: lam_invoke_function
+      operator: airflow.providers.amazon.aws.operators.lambda_function.LambdaInvokeFunctionOperator
+      function_name: '{{ params.lam_function_name }}'
+      payload: '{"action": "test"}'
+      dependencies:
+      - lam_wait_for_lambda_stack
+    lam_delete_lambda_stack:
+      task_id: lam_delete_lambda_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.lam_stack_name }}'
+      dependencies:
+      - lam_invoke_function
+    lam_wait_for_lambda_delete:
+      task_id: lam_wait_for_lambda_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.lam_stack_name }}'
+      dependencies:
+      - lam_delete_lambda_stack
+    sfn_create_sfn_stack:
+      task_id: sfn_create_sfn_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.sfn_stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.sfn_stack_name }}'
+        Capabilities:
+        - CAPABILITY_IAM
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nParameters:\n  StateMachineName:\n\
+          \    Type: String\n    Default: mwaa-test-sfn\nResources:\n  SfnRole:\n\
+          \    Type: AWS::IAM::Role\n    Properties:\n      AssumeRolePolicyDocument:\n\
+          \        Version: '2012-10-17'\n        Statement:\n          - Effect:\
+          \ Allow\n            Principal:\n              Service: states.amazonaws.com\n\
+          \            Action: sts:AssumeRole\n  TestStateMachine:\n    Type: AWS::StepFunctions::StateMachine\n\
+          \    Properties:\n      StateMachineName: !Ref StateMachineName\n      RoleArn:\
+          \ !GetAtt SfnRole.Arn\n      DefinitionString: |\n        {\"Comment\":\
+          \ \"Test\", \"StartAt\": \"Pass\", \"States\": {\"Pass\": {\"Type\": \"\
+          Pass\", \"Result\": \"Hello from MWAA\", \"End\": true}}}\nOutputs:\n  StateMachineArn:\n\
+          \    Value: !Ref TestStateMachine\n"
+        Parameters:
+        - ParameterKey: StateMachineName
+          ParameterValue: '{{ params.sfn_state_machine_name }}'
+      dependencies:
+      - lam_invoke_function
+    sfn_wait_for_sfn_stack:
+      task_id: sfn_wait_for_sfn_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.sfn_stack_name }}'
+      dependencies:
+      - sfn_create_sfn_stack
+    sfn_start_execution:
+      task_id: sfn_start_execution
+      operator: airflow.providers.amazon.aws.operators.step_function.StepFunctionStartExecutionOperator
+      state_machine_arn: '{{ ti.xcom_pull(task_ids=''create_sfn_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      state_machine_input: '{"key": "value"}'
+      dependencies:
+      - sfn_wait_for_sfn_stack
+    sfn_wait_for_execution:
+      task_id: sfn_wait_for_execution
+      operator: airflow.providers.amazon.aws.sensors.step_function.StepFunctionExecutionSensor
+      execution_arn: '{{ ti.xcom_pull(task_ids=''start_execution'') }}'
+      dependencies:
+      - sfn_start_execution
+    sfn_delete_sfn_stack:
+      task_id: sfn_delete_sfn_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.sfn_stack_name }}'
+      dependencies:
+      - sfn_wait_for_execution
+    sfn_wait_for_sfn_delete:
+      task_id: sfn_wait_for_sfn_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.sfn_stack_name }}'
+      dependencies:
+      - sfn_delete_sfn_stack
+  description: 'Lambda + Step Functions: create function then orchestrate with state
+    machine'
+  params:
+    lam_function_name: mwaa-test-lambda
+    lam_stack_name: mwaa-test-lambda-stack
+    sfn_state_machine_name: mwaa-test-sfn
+    sfn_stack_name: mwaa-test-sfn-stack

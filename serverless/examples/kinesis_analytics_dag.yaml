@@ -1,0 +1,77 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+kinesis_analytics_dag:
+  schedule: None
+  tasks:
+    create_kinesis_stack:
+      task_id: create_kinesis_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.stack_name }}'
+        Capabilities:
+        - CAPABILITY_IAM
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  KinesisRole:\n\
+          \    Type: AWS::IAM::Role\n    Properties:\n      AssumeRolePolicyDocument:\n\
+          \        Version: '2012-10-17'\n        Statement:\n          - Effect:\
+          \ Allow\n            Principal:\n              Service: kinesisanalytics.amazonaws.com\n\
+          \            Action: sts:AssumeRole\nOutputs:\n  RoleArn:\n    Value: !GetAtt\
+          \ KinesisRole.Arn\n"
+    wait_for_kinesis_stack:
+      task_id: wait_for_kinesis_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - create_kinesis_stack
+    create_application:
+      task_id: create_application
+      operator: airflow.providers.amazon.aws.operators.kinesis_analytics.KinesisAnalyticsV2CreateApplicationOperator
+      application_name: '{{ params.application_name }}'
+      runtime_environment: FLINK-1_18
+      service_execution_role: '{{ ti.xcom_pull(task_ids=''create_kinesis_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      dependencies:
+      - wait_for_kinesis_stack
+    start_application:
+      task_id: start_application
+      operator: airflow.providers.amazon.aws.operators.kinesis_analytics.KinesisAnalyticsV2StartApplicationOperator
+      application_name: '{{ params.application_name }}'
+      dependencies:
+      - create_application
+    stop_application:
+      task_id: stop_application
+      operator: airflow.providers.amazon.aws.operators.kinesis_analytics.KinesisAnalyticsV2StopApplicationOperator
+      trigger_rule: all_done
+      application_name: '{{ params.application_name }}'
+      dependencies:
+      - start_application
+    delete_kinesis_stack:
+      task_id: delete_kinesis_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - stop_application
+    wait_for_kinesis_delete:
+      task_id: wait_for_kinesis_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_kinesis_stack
+  description: MWAA Serverless Kinesis Analytics example DAG
+  params:
+    application_name: mwaa-test-kinesis-app
+    stack_name: mwaa-test-kinesis-stack

@@ -14,9 +14,6 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 athena_dag:
-  dag_id: athena_dag
-  params:
-    output_location: s3://amzn-s3-demo-bucket/athena-results/
   schedule: None
   tasks:
     create_stack:
@@ -39,34 +36,18 @@ athena_dag:
       operator: airflow.providers.amazon.aws.operators.athena.AthenaOperator
       database: default
       output_location: '{{ params.output_location }}'
-      query: |
-        SELECT 
-          cases.fips, 
-          admin2 as county, 
-          province_state, 
-          confirmed,
-          growth_count, 
-          sum(num_licensed_beds) as num_licensed_beds, 
-          sum(num_staffed_beds) as num_staffed_beds, 
-          sum(num_icu_beds) as num_icu_beds
-        FROM 
-          "covid-19"."hospital_beds" beds, 
-          ( SELECT 
-              fips, 
-              admin2, 
-              province_state, 
-              confirmed, 
-              last_value(confirmed) over (partition by fips order by last_update) - first_value(confirmed) over (partition by fips order by last_update) as growth_count,
-              first_value(last_update) over (partition by fips order by last_update desc) as most_recent,
-              last_update
-            FROM  
-              "covid-19"."enigma_jhu" 
-            WHERE 
-              from_iso8601_timestamp(last_update) > now() - interval '200' day AND country_region = 'US') cases
-        WHERE 
-          beds.fips = cases.fips AND last_update = most_recent
-        GROUP BY cases.fips, confirmed, growth_count, admin2, province_state
-        ORDER BY growth_count desc
+      query: "SELECT cases.fips, admin2 as county, province_state, confirmed, growth_count,\n\
+        \  sum(num_licensed_beds) as num_licensed_beds,\n  sum(num_staffed_beds) as\
+        \ num_staffed_beds,\n  sum(num_icu_beds) as num_icu_beds\nFROM \"covid-19\"\
+        .\"hospital_beds\" beds,\n  (SELECT fips, admin2, province_state, confirmed,\n\
+        \    last_value(confirmed) over (partition by fips order by last_update) -\n\
+        \    first_value(confirmed) over (partition by fips order by last_update)\
+        \ as growth_count,\n    first_value(last_update) over (partition by fips order\
+        \ by last_update desc) as most_recent,\n    last_update\n  FROM \"covid-19\"\
+        .\"enigma_jhu\"\n  WHERE from_iso8601_timestamp(last_update) > now() - interval\
+        \ '200' day\n    AND country_region = 'US') cases\nWHERE beds.fips = cases.fips\
+        \ AND last_update = most_recent\nGROUP BY cases.fips, confirmed, growth_count,\
+        \ admin2, province_state\nORDER BY growth_count desc\n"
       task_id: query_1
       dependencies:
       - wait_for_stack_create
@@ -74,8 +55,10 @@ athena_dag:
       operator: airflow.providers.amazon.aws.operators.athena.AthenaOperator
       database: default
       output_location: '{{ params.output_location }}'
-      query: |
-        SELECT * FROM "covid-19"."world_cases_deaths_testing" order by "date" desc limit 10;
+      query: 'SELECT * FROM "covid-19"."world_cases_deaths_testing" order by "date"
+        desc limit 10;
+
+        '
       task_id: query_2
       dependencies:
       - wait_for_stack_create
@@ -83,25 +66,11 @@ athena_dag:
       operator: airflow.providers.amazon.aws.operators.athena.AthenaOperator
       database: default
       output_location: '{{ params.output_location }}'
-      query: |
-        SELECT 
-          date,
-          positive,
-          negative,
-          pending,
-          hospitalized,
-          death,
-          total,
-          deathincrease,
-          hospitalizedincrease,
-          negativeincrease,
-          positiveincrease,
-          sta.state AS state_abbreviation,
-          abb.state 
-
-        FROM "covid-19"."covid_testing_states_daily" sta
-        JOIN "covid-19"."us_state_abbreviations" abb ON sta.state = abb.abbreviation
-        limit 500;
+      query: "SELECT date, positive, negative, pending, hospitalized, death, total,\n\
+        \  deathincrease, hospitalizedincrease, negativeincrease, positiveincrease,\n\
+        \  sta.state AS state_abbreviation, abb.state\nFROM \"covid-19\".\"covid_testing_states_daily\"\
+        \ sta\nJOIN \"covid-19\".\"us_state_abbreviations\" abb ON sta.state = abb.abbreviation\n\
+        limit 500;\n"
       task_id: query_3
       dependencies:
       - wait_for_stack_create
@@ -121,4 +90,7 @@ athena_dag:
       trigger_rule: all_success
       dependencies:
       - delete_stack
-
+  dag_id: athena_dag
+  description: MWAA Serverless Athena example DAG
+  params:
+    output_location: s3://amzn-s3-demo-bucket/athena-results/

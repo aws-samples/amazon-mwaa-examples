@@ -1,0 +1,317 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+combo_s3_glue_athena_sns:
+  schedule: None
+  tasks:
+    s3_create_test_bucket:
+      operator: airflow.providers.amazon.aws.operators.s3.S3CreateBucketOperator
+      bucket_name: test-bucket-{{ ds_nodash }}
+      task_id: s3_create_test_bucket
+    s3_create_test_object:
+      operator: airflow.providers.amazon.aws.operators.s3.S3CreateObjectOperator
+      data: Hello World
+      s3_bucket: test-bucket-{{ ds_nodash }}
+      s3_key: test-file.txt
+      task_id: s3_create_test_object
+      replace: true
+      dependencies:
+      - s3_create_test_bucket
+    s3_wait_for_key:
+      operator: airflow.providers.amazon.aws.sensors.s3.S3KeySensor
+      bucket_key: test-file.txt
+      bucket_name: test-bucket-{{ ds_nodash }}
+      task_id: s3_wait_for_key
+      use_regex: false
+      wildcard_match: false
+      dependencies:
+      - s3_create_test_object
+    s3_list_objects:
+      operator: airflow.providers.amazon.aws.operators.s3.S3ListOperator
+      apply_wildcard: false
+      bucket: test-bucket-{{ ds_nodash }}
+      delimiter: ''
+      task_id: s3_list_objects
+      dependencies:
+      - s3_wait_for_key
+    s3_delete_objects:
+      operator: airflow.providers.amazon.aws.operators.s3.S3DeleteObjectsOperator
+      bucket: test-bucket-{{ ds_nodash }}
+      keys:
+      - test-file.txt
+      task_id: s3_delete_objects
+      dependencies:
+      - s3_list_objects
+    s3_delete_test_bucket:
+      operator: airflow.providers.amazon.aws.operators.s3.S3DeleteBucketOperator
+      aws_conn_id: aws_default
+      bucket_name: test-bucket-{{ ds_nodash }}
+      force_delete: true
+      task_id: s3_delete_test_bucket
+      trigger_rule: all_done
+      dependencies:
+      - s3_delete_objects
+    glue_create_glue_stack:
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.glue_stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.glue_stack_name }}'
+        Capabilities:
+        - CAPABILITY_IAM
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  ScriptBucket:\n\
+          \    Type: AWS::S3::Bucket\n  GlueRole:\n    Type: AWS::IAM::Role\n    Properties:\n\
+          \      AssumeRolePolicyDocument:\n        Version: '2012-10-17'\n      \
+          \  Statement:\n          - Effect: Allow\n            Principal:\n     \
+          \         Service: glue.amazonaws.com\n            Action: sts:AssumeRole\n\
+          \      ManagedPolicyArns:\n        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole\n\
+          \      Policies:\n        - PolicyName: S3Access\n          PolicyDocument:\n\
+          \            Version: '2012-10-17'\n            Statement:\n           \
+          \   - Effect: Allow\n                Action: s3:*\n                Resource:\
+          \ '*'\nOutputs:\n  BucketName:\n    Value: !Ref ScriptBucket\n  RoleName:\n\
+          \    Value: !Ref GlueRole\n"
+      task_id: glue_create_glue_stack
+      dependencies:
+      - s3_delete_objects
+    glue_wait_for_glue_stack:
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.glue_stack_name }}'
+      task_id: glue_wait_for_glue_stack
+      dependencies:
+      - glue_create_glue_stack
+    glue_create_script:
+      operator: airflow.providers.amazon.aws.operators.s3.S3CreateObjectOperator
+      data: '#!/usr/bin/env python3
+
+        import sys
+
+        from awsglue.transforms import *
+
+        from awsglue.utils import getResolvedOptions
+
+        from pyspark.context import SparkContext
+
+        from awsglue.context import GlueContext
+
+        from awsglue.job import Job
+
+        from pyspark.sql import SparkSession
+
+
+        args = getResolvedOptions(sys.argv, [''JOB_NAME''])
+
+        sc = SparkContext()
+
+        glueContext = GlueContext(sc)
+
+        spark = glueContext.spark_session
+
+        job = Job(glueContext)
+
+        job.init(args[''JOB_NAME''], args)
+
+
+        print("=== Glue 5.0 Job Started ===")
+
+        print(f"Python version: {sys.version}")
+
+        print(f"Spark version: {spark.version}")
+
+        print(f"Job name: {args[''JOB_NAME'']}")
+
+
+        data = [("test", 1, "success"), ("glue", 2, "running"), ("job", 3, "complete")]
+
+        columns = ["name", "id", "status"]
+
+        df = spark.createDataFrame(data, columns)
+
+        print("Created test DataFrame:")
+
+        df.show()
+
+
+        print("=== Glue 5.0 Job Completed Successfully ===")
+
+        job.commit()
+
+        '
+      replace: true
+      s3_bucket: '{{ ti.xcom_pull(task_ids=''create_glue_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      s3_key: '{{ params.glue_script_key }}'
+      task_id: glue_create_script
+      dependencies:
+      - glue_wait_for_glue_stack
+    glue_run_glue_job:
+      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+      concurrent_run_limit: 1
+      create_job_kwargs:
+        GlueVersion: '5.0'
+        Command:
+          Name: glueetl
+          ScriptLocation: s3://{{ ti.xcom_pull(task_ids='create_glue_stack')['CreateStackResponse']['Outputs'][0]['OutputValue']
+            }}/{{ params.glue_script_key }}
+          PythonVersion: '3'
+        DefaultArguments:
+          --job-language: python
+          --enable-metrics: ''
+          --enable-continuous-cloudwatch-log: 'true'
+        MaxRetries: 0
+        Timeout: 60
+      iam_role_name: '{{ ti.xcom_pull(task_ids=''create_glue_stack'')[''CreateStackResponse''][''Outputs''][1][''OutputValue'']
+        }}'
+      job_desc: AWS Glue Job with Airflow
+      job_name: glue5-python3-job-{{ ds_nodash }}
+      task_id: glue_run_glue_job
+      wait_for_completion: true
+      dependencies:
+      - glue_create_script
+    glue_delete_glue_stack:
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      stack_name: '{{ params.glue_stack_name }}'
+      task_id: glue_delete_glue_stack
+      trigger_rule: all_done
+      dependencies:
+      - glue_run_glue_job
+    glue_wait_for_glue_delete:
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.glue_stack_name }}'
+      task_id: glue_wait_for_glue_delete
+      dependencies:
+      - glue_delete_glue_stack
+    ath_create_stack:
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      cloudformation_parameters:
+        StackName: covid-lake-stack
+        TemplateURL: https://covid19-lake.s3.us-east-2.amazonaws.com/cfn/CovidLakeStack.template.json
+        TimeoutInMinutes: 5
+        OnFailure: DELETE
+      stack_name: covid-lake-stack
+      task_id: ath_create_stack
+      dependencies:
+      - glue_run_glue_job
+    ath_wait_for_stack_create:
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: covid-lake-stack
+      task_id: ath_wait_for_stack_create
+      dependencies:
+      - ath_create_stack
+    ath_query_1:
+      operator: airflow.providers.amazon.aws.operators.athena.AthenaOperator
+      database: default
+      output_location: '{{ params.ath_output_location }}'
+      query: "SELECT cases.fips, admin2 as county, province_state, confirmed, growth_count,\n\
+        \  sum(num_licensed_beds) as num_licensed_beds,\n  sum(num_staffed_beds) as\
+        \ num_staffed_beds,\n  sum(num_icu_beds) as num_icu_beds\nFROM \"covid-19\"\
+        .\"hospital_beds\" beds,\n  (SELECT fips, admin2, province_state, confirmed,\n\
+        \    last_value(confirmed) over (partition by fips order by last_update) -\n\
+        \    first_value(confirmed) over (partition by fips order by last_update)\
+        \ as growth_count,\n    first_value(last_update) over (partition by fips order\
+        \ by last_update desc) as most_recent,\n    last_update\n  FROM \"covid-19\"\
+        .\"enigma_jhu\"\n  WHERE from_iso8601_timestamp(last_update) > now() - interval\
+        \ '200' day\n    AND country_region = 'US') cases\nWHERE beds.fips = cases.fips\
+        \ AND last_update = most_recent\nGROUP BY cases.fips, confirmed, growth_count,\
+        \ admin2, province_state\nORDER BY growth_count desc\n"
+      task_id: ath_query_1
+      dependencies:
+      - ath_wait_for_stack_create
+    ath_query_2:
+      operator: airflow.providers.amazon.aws.operators.athena.AthenaOperator
+      database: default
+      output_location: '{{ params.ath_output_location }}'
+      query: 'SELECT * FROM "covid-19"."world_cases_deaths_testing" order by "date"
+        desc limit 10;
+
+        '
+      task_id: ath_query_2
+      dependencies:
+      - ath_wait_for_stack_create
+    ath_query_3:
+      operator: airflow.providers.amazon.aws.operators.athena.AthenaOperator
+      database: default
+      output_location: '{{ params.ath_output_location }}'
+      query: "SELECT date, positive, negative, pending, hospitalized, death, total,\n\
+        \  deathincrease, hospitalizedincrease, negativeincrease, positiveincrease,\n\
+        \  sta.state AS state_abbreviation, abb.state\nFROM \"covid-19\".\"covid_testing_states_daily\"\
+        \ sta\nJOIN \"covid-19\".\"us_state_abbreviations\" abb ON sta.state = abb.abbreviation\n\
+        limit 500;\n"
+      task_id: ath_query_3
+      dependencies:
+      - ath_wait_for_stack_create
+    ath_delete_stack:
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      stack_name: covid-lake-stack
+      task_id: ath_delete_stack
+      trigger_rule: all_done
+      dependencies:
+      - ath_query_1
+      - ath_query_3
+      - ath_query_2
+    ath_wait_for_stack_delete:
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: covid-lake-stack
+      task_id: ath_wait_for_stack_delete
+      trigger_rule: all_success
+      dependencies:
+      - ath_delete_stack
+    sns_create_sns_stack:
+      task_id: sns_create_sns_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.sns_stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.sns_stack_name }}'
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nParameters:\n  TopicName:\n\
+          \    Type: String\n    Default: mwaa-test-sns-topic\nResources:\n  TestTopic:\n\
+          \    Type: AWS::SNS::Topic\n    Properties:\n      TopicName: !Ref TopicName\n\
+          Outputs:\n  TopicArn:\n    Value: !Ref TestTopic\n"
+        Parameters:
+        - ParameterKey: TopicName
+          ParameterValue: '{{ params.sns_topic_name }}'
+      dependencies:
+      - ath_query_3
+    sns_wait_for_sns_stack:
+      task_id: sns_wait_for_sns_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.sns_stack_name }}'
+      dependencies:
+      - sns_create_sns_stack
+    sns_publish_message:
+      task_id: sns_publish_message
+      operator: airflow.providers.amazon.aws.operators.sns.SnsPublishOperator
+      target_arn: '{{ ti.xcom_pull(task_ids=''create_sns_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      message: Hello from MWAA Serverless test
+      dependencies:
+      - sns_wait_for_sns_stack
+    sns_delete_sns_stack:
+      task_id: sns_delete_sns_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.sns_stack_name }}'
+      dependencies:
+      - sns_publish_message
+    sns_wait_for_sns_delete:
+      task_id: sns_wait_for_sns_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.sns_stack_name }}'
+      dependencies:
+      - sns_delete_sns_stack
+  description: 'S3 -> Glue -> Athena -> SNS: ingest, transform, query, notify'
+  params:
+    glue_stack_name: mwaa-test-glue-stack
+    glue_script_key: scripts/glue-sample-job.py
+    ath_output_location: s3://amzn-s3-demo-bucket/athena-results/
+    sns_topic_name: mwaa-test-sns-topic
+    sns_stack_name: mwaa-test-sns-stack

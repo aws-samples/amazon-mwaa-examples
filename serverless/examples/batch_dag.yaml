@@ -1,0 +1,91 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+batch_dag:
+  schedule: None
+  tasks:
+    create_batch_stack:
+      task_id: create_batch_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.stack_name }}'
+        Capabilities:
+        - CAPABILITY_IAM
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  BatchServiceRole:\n\
+          \    Type: AWS::IAM::Role\n    Properties:\n      AssumeRolePolicyDocument:\n\
+          \        Version: '2012-10-17'\n        Statement:\n          - Effect:\
+          \ Allow\n            Principal:\n              Service: batch.amazonaws.com\n\
+          \            Action: sts:AssumeRole\n      ManagedPolicyArns:\n        -\
+          \ arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole\n  ComputeEnv:\n\
+          \    Type: AWS::Batch::ComputeEnvironment\n    Properties:\n      Type:\
+          \ MANAGED\n      ComputeResources:\n        Type: FARGATE\n        MaxvCpus:\
+          \ 4\n        Subnets:\n          - !Ref PublicSubnet\n        SecurityGroupIds:\n\
+          \          - !GetAtt VPC.DefaultSecurityGroup\n      ServiceRole: !GetAtt\
+          \ BatchServiceRole.Arn\n  VPC:\n    Type: AWS::EC2::VPC\n    Properties:\n\
+          \      CidrBlock: 10.0.0.0/16\n      EnableDnsSupport: true\n      EnableDnsHostnames:\
+          \ true\n  PublicSubnet:\n    Type: AWS::EC2::Subnet\n    Properties:\n \
+          \     VpcId: !Ref VPC\n      CidrBlock: 10.0.1.0/24\n      MapPublicIpOnLaunch:\
+          \ true\n  IGW:\n    Type: AWS::EC2::InternetGateway\n  AttachIGW:\n    Type:\
+          \ AWS::EC2::VPCGatewayAttachment\n    Properties:\n      VpcId: !Ref VPC\n\
+          \      InternetGatewayId: !Ref IGW\n  JobQueue:\n    Type: AWS::Batch::JobQueue\n\
+          \    Properties:\n      Priority: 1\n      ComputeEnvironmentOrder:\n  \
+          \      - Order: 1\n          ComputeEnvironment: !Ref ComputeEnv\n  JobDef:\n\
+          \    Type: AWS::Batch::JobDefinition\n    Properties:\n      Type: container\n\
+          \      PlatformCapabilities:\n        - FARGATE\n      ContainerProperties:\n\
+          \        Image: public.ecr.aws/amazonlinux/amazonlinux:2023\n        Command:\n\
+          \          - echo\n          - Hello from MWAA Serverless Batch test\n \
+          \       ResourceRequirements:\n          - Type: VCPU\n            Value:\
+          \ '0.25'\n          - Type: MEMORY\n            Value: '512'\n        ExecutionRoleArn:\
+          \ !GetAtt EcsTaskRole.Arn\n  EcsTaskRole:\n    Type: AWS::IAM::Role\n  \
+          \  Properties:\n      AssumeRolePolicyDocument:\n        Version: '2012-10-17'\n\
+          \        Statement:\n          - Effect: Allow\n            Principal:\n\
+          \              Service: ecs-tasks.amazonaws.com\n            Action: sts:AssumeRole\n\
+          \      ManagedPolicyArns:\n        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy\n\
+          Outputs:\n  JobQueueArn:\n    Value: !Ref JobQueue\n  JobDefArn:\n    Value:\
+          \ !Ref JobDef\n"
+    wait_for_batch_stack:
+      task_id: wait_for_batch_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - create_batch_stack
+    submit_job:
+      task_id: submit_job
+      operator: airflow.providers.amazon.aws.operators.batch.BatchOperator
+      job_name: batch-job-{{ ds_nodash }}
+      job_definition: '{{ ti.xcom_pull(task_ids=''create_batch_stack'')[''CreateStackResponse''][''Outputs''][1][''OutputValue'']
+        }}'
+      job_queue: '{{ ti.xcom_pull(task_ids=''create_batch_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      wait_for_completion: true
+      dependencies:
+      - wait_for_batch_stack
+    delete_batch_stack:
+      task_id: delete_batch_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - submit_job
+    wait_for_batch_delete:
+      task_id: wait_for_batch_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_batch_stack
+  description: MWAA Serverless Batch example DAG
+  params:
+    stack_name: mwaa-test-batch-stack

@@ -1,0 +1,65 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+opensearch_serverless_dag:
+  schedule: None
+  tasks:
+    create_aoss_stack:
+      task_id: create_aoss_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.stack_name }}'
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  SecurityPolicy:\n\
+          \    Type: AWS::OpenSearchServerless::SecurityPolicy\n    Properties:\n\
+          \      Name: mwaa-test-enc-policy\n      Type: encryption\n      Policy:\
+          \ '{\"Rules\":[{\"ResourceType\":\"collection\",\"Resource\":[\"collection/mwaa-test-collection\"\
+          ]}],\"AWSOwnedKey\":true}'\n  NetworkPolicy:\n    Type: AWS::OpenSearchServerless::SecurityPolicy\n\
+          \    Properties:\n      Name: mwaa-test-net-policy\n      Type: network\n\
+          \      Policy: '[{\"Rules\":[{\"ResourceType\":\"collection\",\"Resource\"\
+          :[\"collection/mwaa-test-collection\"]}],\"AllowFromPublic\":true}]'\n \
+          \ Collection:\n    Type: AWS::OpenSearchServerless::Collection\n    DependsOn:\n\
+          \      - SecurityPolicy\n      - NetworkPolicy\n    Properties:\n      Name:\
+          \ mwaa-test-collection\n      Type: SEARCH\nOutputs:\n  CollectionName:\n\
+          \    Value: mwaa-test-collection\n"
+    wait_for_aoss_stack:
+      task_id: wait_for_aoss_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - create_aoss_stack
+    wait_for_collection:
+      task_id: wait_for_collection
+      operator: airflow.providers.amazon.aws.sensors.opensearch_serverless.OpenSearchServerlessCollectionActiveSensor
+      collection_name: '{{ params.collection_name }}'
+      dependencies:
+      - wait_for_aoss_stack
+    delete_aoss_stack:
+      task_id: delete_aoss_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - wait_for_collection
+    wait_for_aoss_delete:
+      task_id: wait_for_aoss_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_aoss_stack
+  description: MWAA Serverless Opensearch Serverless example DAG
+  params:
+    collection_name: mwaa-test-collection
+    stack_name: mwaa-test-aoss-stack

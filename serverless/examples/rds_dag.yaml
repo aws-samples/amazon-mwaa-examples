@@ -1,0 +1,75 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+rds_dag:
+  schedule: None
+  tasks:
+    create_rds_stack:
+      task_id: create_rds_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.stack_name }}'
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  TestDB:\n\
+          \    Type: AWS::RDS::DBInstance\n    Properties:\n      DBInstanceIdentifier:\
+          \ mwaa-test-db\n      DBInstanceClass: db.t3.micro\n      Engine: mysql\n\
+          \      MasterUsername: admin\n      MasterUserPassword: TempPass123!\n \
+          \     AllocatedStorage: '20'\n      BackupRetentionPeriod: 0\n      DeletionProtection:\
+          \ false\nOutputs:\n  DBInstanceId:\n    Value: !Ref TestDB\n"
+    wait_for_rds_stack:
+      task_id: wait_for_rds_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - create_rds_stack
+    create_snapshot:
+      task_id: create_snapshot
+      operator: airflow.providers.amazon.aws.operators.rds.RdsCreateDbSnapshotOperator
+      db_type: instance
+      db_identifier: mwaa-test-db
+      db_snapshot_identifier: snapshot-{{ ds_nodash }}
+      dependencies:
+      - wait_for_rds_stack
+    wait_for_snapshot:
+      task_id: wait_for_snapshot
+      operator: airflow.providers.amazon.aws.sensors.rds.RdsSnapshotExistenceSensor
+      db_type: instance
+      db_snapshot_identifier: snapshot-{{ ds_nodash }}
+      dependencies:
+      - create_snapshot
+    delete_snapshot:
+      task_id: delete_snapshot
+      operator: airflow.providers.amazon.aws.operators.rds.RdsDeleteDbSnapshotOperator
+      trigger_rule: all_done
+      db_type: instance
+      db_snapshot_identifier: snapshot-{{ ds_nodash }}
+      dependencies:
+      - wait_for_snapshot
+    delete_rds_stack:
+      task_id: delete_rds_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_snapshot
+    wait_for_rds_delete:
+      task_id: wait_for_rds_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_rds_stack
+  description: MWAA Serverless Rds example DAG
+  params:
+    stack_name: mwaa-test-rds-stack

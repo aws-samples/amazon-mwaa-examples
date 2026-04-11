@@ -1,0 +1,73 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+datasync_dag:
+  schedule: None
+  tasks:
+    create_datasync_stack:
+      task_id: create_datasync_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.stack_name }}'
+        Capabilities:
+        - CAPABILITY_IAM
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  SourceBucket:\n\
+          \    Type: AWS::S3::Bucket\n  DestBucket:\n    Type: AWS::S3::Bucket\n \
+          \ DataSyncRole:\n    Type: AWS::IAM::Role\n    Properties:\n      AssumeRolePolicyDocument:\n\
+          \        Version: '2012-10-17'\n        Statement:\n          - Effect:\
+          \ Allow\n            Principal:\n              Service: datasync.amazonaws.com\n\
+          \            Action: sts:AssumeRole\n      Policies:\n        - PolicyName:\
+          \ S3Access\n          PolicyDocument:\n            Version: '2012-10-17'\n\
+          \            Statement:\n              - Effect: Allow\n               \
+          \ Action: s3:*\n                Resource: '*'\n  SourceLocation:\n    Type:\
+          \ AWS::DataSync::LocationS3\n    Properties:\n      S3BucketArn: !GetAtt\
+          \ SourceBucket.Arn\n      S3Config:\n        BucketAccessRoleArn: !GetAtt\
+          \ DataSyncRole.Arn\n  DestLocation:\n    Type: AWS::DataSync::LocationS3\n\
+          \    Properties:\n      S3BucketArn: !GetAtt DestBucket.Arn\n      S3Config:\n\
+          \        BucketAccessRoleArn: !GetAtt DataSyncRole.Arn\n  DataSyncTask:\n\
+          \    Type: AWS::DataSync::Task\n    Properties:\n      SourceLocationArn:\
+          \ !Ref SourceLocation\n      DestinationLocationArn: !Ref DestLocation\n\
+          Outputs:\n  TaskArn:\n    Value: !GetAtt DataSyncTask.TaskArn\n"
+    wait_for_datasync_stack:
+      task_id: wait_for_datasync_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - create_datasync_stack
+    run_datasync:
+      task_id: run_datasync
+      operator: airflow.providers.amazon.aws.operators.datasync.DataSyncOperator
+      task_arn: '{{ ti.xcom_pull(task_ids=''create_datasync_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
+        }}'
+      wait_for_completion: true
+      dependencies:
+      - wait_for_datasync_stack
+    delete_datasync_stack:
+      task_id: delete_datasync_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - run_datasync
+    wait_for_datasync_delete:
+      task_id: wait_for_datasync_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_datasync_stack
+  description: MWAA Serverless Datasync example DAG
+  params:
+    stack_name: mwaa-test-datasync-stack

@@ -1,0 +1,79 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+emr_serverless_dag:
+  schedule: None
+  tasks:
+    create_emr_stack:
+      task_id: create_emr_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
+      stack_name: '{{ params.stack_name }}'
+      cloudformation_parameters:
+        StackName: '{{ params.stack_name }}'
+        Capabilities:
+        - CAPABILITY_IAM
+        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  EmrServerlessRole:\n\
+          \    Type: AWS::IAM::Role\n    Properties:\n      AssumeRolePolicyDocument:\n\
+          \        Version: '2012-10-17'\n        Statement:\n          - Effect:\
+          \ Allow\n            Principal:\n              Service: emr-serverless.amazonaws.com\n\
+          \            Action: sts:AssumeRole\n      ManagedPolicyArns:\n        -\
+          \ arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess\n  ScriptBucket:\n    Type:\
+          \ AWS::S3::Bucket\nOutputs:\n  RoleArn:\n    Value: !GetAtt EmrServerlessRole.Arn\n\
+          \  ScriptBucketName:\n    Value: !Ref ScriptBucket\n"
+    wait_for_emr_stack:
+      task_id: wait_for_emr_stack
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - create_emr_stack
+    create_application:
+      task_id: create_application
+      operator: airflow.providers.amazon.aws.operators.emr.EmrServerlessCreateApplicationOperator
+      release_label: emr-7.0.0
+      job_type: SPARK
+      client_request_token: '{{ ds_nodash }}'
+      dependencies:
+      - wait_for_emr_stack
+    stop_application:
+      task_id: stop_application
+      operator: airflow.providers.amazon.aws.operators.emr.EmrServerlessStopApplicationOperator
+      trigger_rule: all_done
+      application_id: '{{ ti.xcom_pull(task_ids=''create_application'') }}'
+      dependencies:
+      - create_application
+    delete_application:
+      task_id: delete_application
+      operator: airflow.providers.amazon.aws.operators.emr.EmrServerlessDeleteApplicationOperator
+      trigger_rule: all_done
+      application_id: '{{ ti.xcom_pull(task_ids=''create_application'') }}'
+      dependencies:
+      - stop_application
+    delete_emr_stack:
+      task_id: delete_emr_stack
+      operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      trigger_rule: all_done
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_application
+    wait_for_emr_delete:
+      task_id: wait_for_emr_delete
+      operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
+      stack_name: '{{ params.stack_name }}'
+      dependencies:
+      - delete_emr_stack
+  description: MWAA Serverless Emr Serverless example DAG
+  params:
+    application_name: mwaa-test-emr-app
+    stack_name: mwaa-test-emr-serverless-stack
