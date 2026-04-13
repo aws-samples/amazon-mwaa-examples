@@ -73,6 +73,7 @@ Resources:
       Environment:
         Variables:
           LOG_LEVEL: INFO
+          BEDROCK_MODEL_ID: anthropic.claude-haiku-4-5-20250620-v1:0
 
   McpHttpApi:
     Type: AWS::Serverless::HttpApi
