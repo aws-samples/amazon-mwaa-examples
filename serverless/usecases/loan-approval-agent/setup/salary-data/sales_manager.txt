@@ -1,0 +1,20 @@
+Occupation: Sales Manager
+Industry: Various (Technology, Retail, Manufacturing, Pharma)
+
+Salary Ranges (United States, Annual):
+- Entry Level / Inside Sales Rep (0-2 years): $40,000 - $60,000 base + commission
+- Account Executive (3-5 years): $60,000 - $90,000 base + commission
+- Sales Manager (5-10 years): $80,000 - $140,000 base + commission
+- VP of Sales / Director (10+ years): $130,000 - $250,000 base + commission
+
+Verification Notes:
+- On-target earnings (OTE) typically 1.5x-2x base salary
+- Commission structures vary widely; verify with employer or pay stubs
+- Technology sales tends to pay highest; retail lowest
+- Variable compensation makes income verification more complex
+
+Red Flags for Income Verification:
+- Claimed OTE without documentation of commission structure
+- Base salary above VP range without C-suite title
+- Inconsistent income across years without explanation of role change
+- Commission-only roles with no base salary documentation
