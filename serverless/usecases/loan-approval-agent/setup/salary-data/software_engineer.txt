@@ -1,0 +1,19 @@
+Occupation: Software Engineer
+Industry: Technology
+
+Salary Ranges (United States, Annual):
+- Entry Level (0-2 years): $70,000 - $110,000
+- Mid Level (3-5 years): $110,000 - $160,000
+- Senior Level (6-10 years): $150,000 - $220,000
+- Staff/Principal (10+ years): $200,000 - $350,000
+
+Verification Notes:
+- Total compensation may include stock options and bonuses (20-40% of base)
+- Remote roles may have geographic pay adjustments
+- Contractors typically earn 1.3x-1.5x equivalent salary without benefits
+- FAANG and top-tier companies may exceed upper ranges by 30-50%
+
+Red Flags for Income Verification:
+- Claimed salary below entry level range with 5+ years experience
+- Claimed salary above principal range without executive title
+- Self-reported income without W-2 or pay stub documentation
