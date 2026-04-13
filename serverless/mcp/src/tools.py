@@ -89,6 +89,11 @@ def validate_yaml(yaml_content: str) -> dict:
             if da_et is not None and _parse_duration_seconds(da_et) is None:
                 errors.append(f"DAG '{dag_key}': default_args.execution_timeout must match pattern ^\\d+[smhd]$")
 
+        # Params validation
+        params = dag_cfg.get("params")
+        if params is not None and not isinstance(params, dict):
+            errors.append(f"DAG '{dag_key}': 'params' must be a mapping, got {type(params).__name__}")
+
         # Tasks validation — schema says tasks is an array
         tasks = dag_cfg["tasks"]
         if isinstance(tasks, list):
