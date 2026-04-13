@@ -1,4 +1,4 @@
-# MWAA Serverless DAG Factory MCP Server
+# MWAA Serverless MCP Server
 
 MCP server on AWS Lambda that helps AI agents build, validate, convert, deploy, and operate MWAA Serverless workflows.
 
