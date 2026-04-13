@@ -30,7 +30,7 @@ from operations import (
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
-mcp_server = MCPLambdaHandler(name="mwaa-serverless-dag-factory", version="2.0.0")
+mcp_server = MCPLambdaHandler(name="mwaa-serverless-mcp", version="2.0.0")
 
 
 @mcp_server.tool()

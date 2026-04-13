@@ -18,7 +18,7 @@ Create `.kiro/settings/mcp.json` in your project root (or `~/.kiro/settings/mcp.
 ```json
 {
   "mcpServers": {
-    "mwaa-dag-factory": {
+    "mwaa-serverless-mcp": {
       "command": "npx",
       "args": [
         "mcp-remote",
