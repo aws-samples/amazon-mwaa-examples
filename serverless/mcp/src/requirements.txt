@@ -1,0 +1,3 @@
+PyYAML>=6.0
+awslabs.mcp_lambda_handler
+boto3
