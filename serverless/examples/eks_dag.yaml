@@ -15,81 +15,183 @@
 
 eks_dag:
   schedule: None
+  description: "MWAA Serverless EKS example: create cluster, run hello-world pod, clean up"
+  params:
+    cluster_name: mwaa-test-eks
+    stack_name: mwaa-test-eks-stack
+    fargate_profile_name: mwaa-test-fp
   tasks:
     create_eks_stack:
       task_id: create_eks_stack
       operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationCreateStackOperator
-      stack_name: '{{ params.stack_name }}'
+      stack_name: "{{ params.stack_name }}"
       cloudformation_parameters:
-        StackName: '{{ params.stack_name }}'
+        StackName: "{{ params.stack_name }}"
         Capabilities:
-        - CAPABILITY_IAM
-        TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  VPC:\n\
-          \    Type: AWS::EC2::VPC\n    Properties:\n      CidrBlock: 10.0.0.0/16\n\
-          \      EnableDnsSupport: true\n      EnableDnsHostnames: true\n  SubnetA:\n\
-          \    Type: AWS::EC2::Subnet\n    Properties:\n      VpcId: !Ref VPC\n  \
-          \    CidrBlock: 10.0.1.0/24\n      AvailabilityZone: !Select [0, !GetAZs\
-          \ '']\n  SubnetB:\n    Type: AWS::EC2::Subnet\n    Properties:\n      VpcId:\
-          \ !Ref VPC\n      CidrBlock: 10.0.2.0/24\n      AvailabilityZone: !Select\
-          \ [1, !GetAZs '']\n  EksRole:\n    Type: AWS::IAM::Role\n    Properties:\n\
-          \      AssumeRolePolicyDocument:\n        Version: '2012-10-17'\n      \
-          \  Statement:\n          - Effect: Allow\n            Principal:\n     \
-          \         Service: eks.amazonaws.com\n            Action: sts:AssumeRole\n\
-          \      ManagedPolicyArns:\n        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy\n\
-          Outputs:\n  RoleArn:\n    Value: !GetAtt EksRole.Arn\n  SubnetAId:\n   \
-          \ Value: !Ref SubnetA\n  SubnetBId:\n    Value: !Ref SubnetB\n  SecurityGroupId:\n\
-          \    Value: !GetAtt VPC.DefaultSecurityGroup\n"
+          - CAPABILITY_IAM
+        TemplateBody: |
+          AWSTemplateFormatVersion: '2010-09-09'
+          Resources:
+            VPC:
+              Type: AWS::EC2::VPC
+              Properties:
+                CidrBlock: 10.0.0.0/16
+                EnableDnsSupport: true
+                EnableDnsHostnames: true
+            IGW:
+              Type: AWS::EC2::InternetGateway
+            AttachIGW:
+              Type: AWS::EC2::VPCGatewayAttachment
+              Properties:
+                VpcId: !Ref VPC
+                InternetGatewayId: !Ref IGW
+            RouteTable:
+              Type: AWS::EC2::RouteTable
+              Properties:
+                VpcId: !Ref VPC
+            Route:
+              Type: AWS::EC2::Route
+              DependsOn: AttachIGW
+              Properties:
+                RouteTableId: !Ref RouteTable
+                DestinationCidrBlock: 0.0.0.0/0
+                GatewayId: !Ref IGW
+            SubnetA:
+              Type: AWS::EC2::Subnet
+              Properties:
+                VpcId: !Ref VPC
+                CidrBlock: 10.0.1.0/24
+                AvailabilityZone: !Select [0, !GetAZs '']
+                MapPublicIpOnLaunch: true
+            SubnetARouteAssoc:
+              Type: AWS::EC2::SubnetRouteTableAssociation
+              Properties:
+                SubnetId: !Ref SubnetA
+                RouteTableId: !Ref RouteTable
+            SubnetB:
+              Type: AWS::EC2::Subnet
+              Properties:
+                VpcId: !Ref VPC
+                CidrBlock: 10.0.2.0/24
+                AvailabilityZone: !Select [1, !GetAZs '']
+                MapPublicIpOnLaunch: true
+            SubnetBRouteAssoc:
+              Type: AWS::EC2::SubnetRouteTableAssociation
+              Properties:
+                SubnetId: !Ref SubnetB
+                RouteTableId: !Ref RouteTable
+            EksRole:
+              Type: AWS::IAM::Role
+              Properties:
+                AssumeRolePolicyDocument:
+                  Version: '2012-10-17'
+                  Statement:
+                    - Effect: Allow
+                      Principal:
+                        Service: eks.amazonaws.com
+                      Action: sts:AssumeRole
+                ManagedPolicyArns:
+                  - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+            FargatePodRole:
+              Type: AWS::IAM::Role
+              Properties:
+                AssumeRolePolicyDocument:
+                  Version: '2012-10-17'
+                  Statement:
+                    - Effect: Allow
+                      Principal:
+                        Service: eks-fargate-pods.amazonaws.com
+                      Action: sts:AssumeRole
+                ManagedPolicyArns:
+                  - arn:aws:iam::aws:policy/AmazonEKSFargatePodExecutionRolePolicy
+          Outputs:
+            EksRoleArn:
+              Value: !GetAtt EksRole.Arn
+            SubnetAId:
+              Value: !Ref SubnetA
+            SubnetBId:
+              Value: !Ref SubnetB
+            SecurityGroupId:
+              Value: !GetAtt VPC.DefaultSecurityGroup
+            FargatePodRoleArn:
+              Value: !GetAtt FargatePodRole.Arn
     wait_for_eks_stack:
       task_id: wait_for_eks_stack
       operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationCreateStackSensor
-      stack_name: '{{ params.stack_name }}'
+      stack_name: "{{ params.stack_name }}"
       dependencies:
-      - create_eks_stack
+        - create_eks_stack
     create_cluster:
       task_id: create_cluster
       operator: airflow.providers.amazon.aws.operators.eks.EksCreateClusterOperator
-      cluster_name: '{{ params.cluster_name }}'
-      cluster_role_arn: '{{ ti.xcom_pull(task_ids=''create_eks_stack'')[''CreateStackResponse''][''Outputs''][0][''OutputValue'']
-        }}'
+      cluster_name: "{{ params.cluster_name }}"
+      cluster_role_arn: "{{ ti.xcom_pull(task_ids='create_eks_stack')['CreateStackResponse']['Outputs'][0]['OutputValue'] }}"
       resources_vpc_config:
         subnetIds:
-        - '{{ ti.xcom_pull(task_ids=''create_eks_stack'')[''CreateStackResponse''][''Outputs''][1][''OutputValue'']
-          }}'
-        - '{{ ti.xcom_pull(task_ids=''create_eks_stack'')[''CreateStackResponse''][''Outputs''][2][''OutputValue'']
-          }}'
+          - "{{ ti.xcom_pull(task_ids='create_eks_stack')['CreateStackResponse']['Outputs'][1]['OutputValue'] }}"
+          - "{{ ti.xcom_pull(task_ids='create_eks_stack')['CreateStackResponse']['Outputs'][2]['OutputValue'] }}"
         securityGroupIds:
-        - '{{ ti.xcom_pull(task_ids=''create_eks_stack'')[''CreateStackResponse''][''Outputs''][3][''OutputValue'']
-          }}'
+          - "{{ ti.xcom_pull(task_ids='create_eks_stack')['CreateStackResponse']['Outputs'][3]['OutputValue'] }}"
       dependencies:
-      - wait_for_eks_stack
+        - wait_for_eks_stack
     wait_for_cluster:
       task_id: wait_for_cluster
       operator: airflow.providers.amazon.aws.sensors.eks.EksClusterStateSensor
-      cluster_name: '{{ params.cluster_name }}'
+      cluster_name: "{{ params.cluster_name }}"
       target_state: ACTIVE
       dependencies:
-      - create_cluster
+        - create_cluster
+    create_fargate_profile:
+      task_id: create_fargate_profile
+      operator: airflow.providers.amazon.aws.operators.eks.EksCreateFargateProfileOperator
+      cluster_name: "{{ params.cluster_name }}"
+      fargate_profile_name: "{{ params.fargate_profile_name }}"
+      pod_execution_role_arn: "{{ ti.xcom_pull(task_ids='create_eks_stack')['CreateStackResponse']['Outputs'][4]['OutputValue'] }}"
+      selectors:
+        - namespace: default
+      wait_for_completion: true
+      dependencies:
+        - wait_for_cluster
+    run_hello_world:
+      task_id: run_hello_world
+      operator: airflow.providers.amazon.aws.operators.eks.EksPodOperator
+      cluster_name: "{{ params.cluster_name }}"
+      pod_name: hello-world
+      namespace: default
+      image: public.ecr.aws/amazonlinux/amazonlinux:2023
+      cmds:
+        - sh
+        - -c
+      arguments:
+        - echo "Hello from MWAA Serverless on EKS!" && date
+      dependencies:
+        - create_fargate_profile
+    delete_fargate_profile:
+      task_id: delete_fargate_profile
+      operator: airflow.providers.amazon.aws.operators.eks.EksDeleteFargateProfileOperator
+      cluster_name: "{{ params.cluster_name }}"
+      fargate_profile_name: "{{ params.fargate_profile_name }}"
+      wait_for_completion: true
+      trigger_rule: all_done
+      dependencies:
+        - run_hello_world
     delete_cluster:
       task_id: delete_cluster
       operator: airflow.providers.amazon.aws.operators.eks.EksDeleteClusterOperator
+      cluster_name: "{{ params.cluster_name }}"
       trigger_rule: all_done
-      cluster_name: '{{ params.cluster_name }}'
       dependencies:
-      - wait_for_cluster
+        - delete_fargate_profile
     delete_eks_stack:
       task_id: delete_eks_stack
       operator: airflow.providers.amazon.aws.operators.cloud_formation.CloudFormationDeleteStackOperator
+      stack_name: "{{ params.stack_name }}"
       trigger_rule: all_done
-      stack_name: '{{ params.stack_name }}'
       dependencies:
-      - delete_cluster
+        - delete_cluster
     wait_for_eks_delete:
       task_id: wait_for_eks_delete
       operator: airflow.providers.amazon.aws.sensors.cloud_formation.CloudFormationDeleteStackSensor
-      stack_name: '{{ params.stack_name }}'
+      stack_name: "{{ params.stack_name }}"
       dependencies:
-      - delete_eks_stack
-  description: MWAA Serverless Eks example DAG
-  params:
-    cluster_name: mwaa-test-eks
-    stack_name: mwaa-test-eks-stack
+        - delete_eks_stack
