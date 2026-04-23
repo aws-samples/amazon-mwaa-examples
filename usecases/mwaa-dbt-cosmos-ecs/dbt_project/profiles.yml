@@ -1,0 +1,10 @@
+sample_dbt_project:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: /tmp/dbt_duckdb.db
+      threads: 4
+      extensions:
+        - httpfs
+        - aws

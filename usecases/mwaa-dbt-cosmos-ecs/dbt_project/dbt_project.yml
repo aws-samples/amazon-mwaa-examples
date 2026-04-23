@@ -1,0 +1,28 @@
+name: 'sample_dbt_project'
+
+config-version: 2
+version: '0.1'
+
+profile: 'sample_dbt_project'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+  - "logs"
+
+vars:
+  s3_output_bucket: "{{ env_var('DBT_S3_BUCKET', 'my-mwaa-bucket') }}"
+  s3_output_prefix: "dbt_output"
+
+on-run-start:
+  - "INSTALL httpfs"
+  - "LOAD httpfs"
+  - "INSTALL aws"
+  - "LOAD aws"
+  - "SET s3_region='{{ env_var('AWS_DEFAULT_REGION', 'us-east-1') }}'"
+  - "CREATE SECRET IF NOT EXISTS s3_cred (TYPE s3, PROVIDER credential_chain)"

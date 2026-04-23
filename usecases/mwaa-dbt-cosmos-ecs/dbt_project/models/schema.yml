@@ -1,0 +1,11 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: "Staged customer data on S3"
+
+  - name: stg_orders
+    description: "Staged order data on S3"
+
+  - name: customer_orders
+    description: "Customer order summary on S3"
