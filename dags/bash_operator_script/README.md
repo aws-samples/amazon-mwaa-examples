@@ -3,7 +3,7 @@ This script serves as an example of how to run a bash operator in Amazon MWAA pr
 
 ### Versions Supported
 
-Apache Airflow 1.10.12 on Amazon MWAA
+Apache Airflow 1.10.12 / 2.0.2 on Amazon MWAA
 
 ### Prerequisites
 - have a valid AWS CLI installation to use the MWAA CLI commands
