@@ -1,3 +1,9 @@
+## Disclaimer
+
+AWS code samples are example code that demonstrates practical implementations of AWS services for specific use cases and scenarios.
+
+These application solutions are not supported products in their own right, but educational examples to help our customers use our products for their applications. As our customer, any applications you integrate these examples into should be thoroughly tested, secured, and optimized according to your business's security standards & policies before deploying to production or handling production workloads.
+
 # Improve Observability across MWAA tasks
 
 Observability across the different processes within the data pipeline is a key component to monitor the success and/or failure of the pipeline. While scheduling the execution of tasks within the data pipeline is controlled by Airflow, the execution of the task itself (transforming, normalizing and/or aggregating data) is done by different services based on the use case. Having an end-to-end view of the data flow is a challenge due to multiple touch points in the data pipeline.

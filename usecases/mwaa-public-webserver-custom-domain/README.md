@@ -1,3 +1,9 @@
+## Disclaimer
+
+AWS code samples are example code that demonstrates practical implementations of AWS services for specific use cases and scenarios.
+
+These application solutions are not supported products in their own right, but educational examples to help our customers use our products for their applications. As our customer, any applications you integrate these examples into should be thoroughly tested, secured, and optimized according to your business's security standards & policies before deploying to production or handling production workloads.
+
 # amazon-mwaa-custom-domain-public-endpoint
 
 Sample code to demonstrate using Amazon CloudFront, AWS Lambda@Edge, and Amazon Cognito to enable custom domain for a public MWAA deployment. This solution is built on code from samples repo below with minor updates.
