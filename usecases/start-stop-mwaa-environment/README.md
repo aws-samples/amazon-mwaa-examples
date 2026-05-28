@@ -10,7 +10,7 @@ These application solutions are not supported products in their own right, but e
 
 ![typescript](https://img.shields.io/badge/cdk-typescript-green)
 [![code style: eslint](https://img.shields.io/badge/code_style-eslint-orange.svg)](https://github.com/psf/black)
-![MWAA](https://img.shields.io/badge/MWAA-2.10.3_|_2.9.2_|_2.8.1_|_2.7.2_|_2.6.3_|_2.5.1_|_2.4.3_|_2.2.2_|_2.0.2-blue)
+![MWAA](https://img.shields.io/badge/MWAA-2.11.0_|_2.10.3_|_2.9.2_|_2.8.1_|_2.7.2_|_2.6.3_|_2.5.1_|_2.4.3_|_2.2.2_|_2.0.2-blue)
 <!-- TOC ignore:true -->
 # Contents
 
