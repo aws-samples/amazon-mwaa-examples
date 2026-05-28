@@ -66,7 +66,13 @@ JOB_SELECT = "select dag_id,  state, job_type , start_date, \
 end_date, latest_heartbeat, executor_class, hostname, unixname from job"
 
 POOL_SLOTS = "select pool, slots, description, include_deferred from slot_pool where pool != 'default_pool'"
-TRIGGER = "select classpath, kwargs, created_date, triggerer_id from trigger"
+
+# NOTE: The trigger table is intentionally excluded from export.
+# Starting in Airflow 2.9.0, trigger.kwargs is Fernet-encrypted with a per-environment key.
+# Exporting and importing these rows into a different environment causes
+# cryptography.fernet.InvalidToken errors that crash the triggerer and scheduler.
+# Triggers are ephemeral (in-flight async waits for deferred tasks) and are recreated
+# automatically when DAGs with deferrable operators run on the new environment.
 
 
 ##################
@@ -88,7 +94,6 @@ OBJECTS_TO_EXPORT = [
     [LOG_SELECT, "log"],
     [TASK_FAIL_SELECT, "task_fail"],
     [JOB_SELECT, "job"],
-    [TRIGGER, "trigger"],
     [POOL_SLOTS, "slot_pool"]
 ]
 

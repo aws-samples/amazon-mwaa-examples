@@ -61,8 +61,12 @@ JOB_IMPORT = "COPY JOB(dag_id,  state, job_type , start_date, \
 
 LOG_IMPORT = "COPY log(dttm, dag_id, task_id, event, execution_date, owner, owner_display_name, run_id, extra) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 POOL_SLOTS = "COPY slot_pool(pool, slots, description, include_deferred) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
-TRIGGER = "COPY trigger(classpath, kwargs, created_date, triggerer_id)\
-             FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
+
+# NOTE: The trigger table is intentionally excluded from import.
+# Starting in Airflow 2.9.0, trigger.kwargs is Fernet-encrypted with a per-environment key.
+# Importing trigger rows from another environment causes cryptography.fernet.InvalidToken
+# errors that crash the triggerer and scheduler. Triggers are ephemeral and are recreated
+# automatically when DAGs with deferrable operators run on the new environment.
 
 # Starting in v2.9.2, we are exculing dataset tables from imports as they are auto-generated
 OBJECTS_TO_IMPORT = [
@@ -256,13 +260,7 @@ with DAG(dag_id=dag_id, schedule_interval=None, catchup=False,  default_args=def
         python_callable=load_data,
         provide_context=True
     )
-    load_triggers = PythonOperator(
-        task_id="load_trg",
-        op_kwargs={'query': TRIGGER, 'file': 'trigger.csv'},
-        python_callable=load_data,
-        provide_context=True
-    )
-    import_t >> load_triggers >> load_task_instance
+    import_t >> load_task_instance
 
     taskfail_dagrun = PythonOperator(
         task_id="task_fail_run",
