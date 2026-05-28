@@ -1,10 +1,16 @@
+## Disclaimer
+
+AWS code samples are example code that demonstrates practical implementations of AWS services for specific use cases and scenarios.
+
+These application solutions are not supported products in their own right, but educational examples to help our customers use our products for their applications. As our customer, any applications you integrate these examples into should be thoroughly tested, secured, and optimized according to your business's security standards & policies before deploying to production or handling production workloads.
+
 
 <!-- TOC ignore:true -->
 # Automate Stopping and Starting an Amazon MWAA Environment
 
 ![typescript](https://img.shields.io/badge/cdk-typescript-green)
 [![code style: eslint](https://img.shields.io/badge/code_style-eslint-orange.svg)](https://github.com/psf/black)
-![MWAA](https://img.shields.io/badge/MWAA-2.9.2_|_2.8.1_|_2.7.2_|_2.6.3_|_2.5.1_|_2.4.3_|_2.2.2_|_2.0.2-blue)
+![MWAA](https://img.shields.io/badge/MWAA-2.10.3_|_2.9.2_|_2.8.1_|_2.7.2_|_2.6.3_|_2.5.1_|_2.4.3_|_2.2.2_|_2.0.2-blue)
 <!-- TOC ignore:true -->
 # Contents
 
@@ -39,6 +45,7 @@
     - [Pausing While Active](#pausing-while-active)
     - [Stopping and Starting Multiple MWAA Environments](#stopping-and-starting-multiple-mwaa-environments)
     - [Not All MetaData Tables are Backed Up](#not-all-metadata-tables-are-backed-up)
+    - [Trigger Table Excluded (Airflow 2.9.0+)](#trigger-table-excluded-airflow-290)
 
 <!-- /TOC -->
 
@@ -409,3 +416,20 @@ tables such as `dag_run`, `task_instance`, `log`, `task_fail`, `job`, `slot_pool
 and `variable` among others. Users should update the export and import DAG scripts for other
 tables in their metadata store. Here is the metadata schema documentation for Airflow
 [2.5.1](https://airflow.apache.org/docs/apache-airflow/2.5.1/database-erd-ref.html) for your reference.
+
+## Trigger Table Excluded (Airflow 2.9.0+)
+
+Starting in Apache Airflow 2.9.0, the `trigger` table's `kwargs` column is encrypted using
+Fernet with a key unique to each MWAA environment. This means trigger data exported from one
+environment cannot be decrypted by another environment, as each has its own Fernet key.
+
+Importing foreign-encrypted trigger rows into a different environment will cause the triggerer
+process to crash with `cryptography.fernet.InvalidToken`, which in turn terminates the
+scheduler and results in a sustained outage until the trigger table is manually cleaned.
+
+The `trigger` table is intentionally excluded from the export/import DAGs for version 2.9.2+.
+This has no functional impact on the start-stop solution because:
+
+- Triggers are ephemeral - they represent in-flight async waits for deferred tasks only.
+- They are recreated automatically when DAGs with deferrable operators run on the new environment.
+- In a proper stop scenario, no tasks should be actively deferred at export time.
