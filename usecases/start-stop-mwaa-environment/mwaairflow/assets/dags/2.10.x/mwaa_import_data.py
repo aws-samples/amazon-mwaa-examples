@@ -48,7 +48,7 @@ TASK_INSTANCE_IMPORT = "COPY task_instance(task_id, dag_id, run_id, custom_opera
 duration, state, task_display_name, try_number, hostname, unixname, job_id, pool, \
 queue, priority_weight, operator, queued_dttm, rendered_map_index, pid, max_tries, executor_config,\
 pool_slots, queued_by_job_id, external_executor_id, trigger_id , \
-trigger_timeout, next_method, next_kwargs, map_index, updated_at) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
+trigger_timeout, next_method, next_kwargs, map_index, executor, updated_at) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 
 TASK_FAIL_IMPORT = "COPY task_fail(task_id, dag_id, run_id, map_index, \
  start_date, end_date, duration) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
@@ -59,7 +59,7 @@ JOB_IMPORT = "COPY JOB(dag_id,  state, job_type , start_date, \
                 FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 
 
-LOG_IMPORT = "COPY log(dttm, dag_id, task_id, event, execution_date, owner, owner_display_name, run_id, extra) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
+LOG_IMPORT = "COPY log(dttm, dag_id, task_id, event, execution_date, owner, owner_display_name, run_id, extra, try_number) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 POOL_SLOTS = "COPY slot_pool(pool, slots, description, include_deferred) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
 
 # NOTE: The trigger table is intentionally excluded from import.

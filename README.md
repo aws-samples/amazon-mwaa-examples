@@ -1,3 +1,9 @@
+## Disclaimer
+
+AWS code samples are example code that demonstrates practical implementations of AWS services for specific use cases and scenarios.
+
+These application solutions are not supported products in their own right, but educational examples to help our customers use our products for their applications. As our customer, any applications you integrate these examples into should be thoroughly tested, secured, and optimized according to your business's security standards & policies before deploying to production or handling production workloads.
+
 ## Amazon Managed Workflows for Apache Airflow (MWAA) Examples
 
 This repository contains example DAGs, requirements.txt, plugins, and CloudFormation templates focused on Amazon MWAA.  Since Amazon MWAA is running open-source Apache Airflow many of the contributions will be applicable for self-managed implementations as well.
@@ -57,4 +63,3 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This library is licensed under the MIT-0 License. See the LICENSE file.
-

@@ -1,3 +1,9 @@
+## Disclaimer
+
+AWS code samples are example code that demonstrates practical implementations of AWS services for specific use cases and scenarios.
+
+These application solutions are not supported products in their own right, but educational examples to help our customers use our products for their applications. As our customer, any applications you integrate these examples into should be thoroughly tested, secured, and optimized according to your business's security standards & policies before deploying to production or handling production workloads.
+
 ### Amazon Managed Workflows for Apache Airflow (MWAA) and Amazon EMR
 
 Use Amazon Managed Workflows for Apache Airflow (MWAA) to design and run a serverless workflow that coordinates Amazon Elastic Map Reduce (EMR) jobs. Amazon EMR is the industry-leading cloud big data platform for processing vast amounts of data using open source tools such as Apache Spark, Apache Hive, Apache HBase, Apache Flink, Apache Hudi, and Presto.
@@ -152,4 +158,3 @@ See [CONTRIBUTING](../../blob/main/CONTRIBUTING.md#security-issue-notifications)
 ## License
 
 This library is licensed under the MIT-0 License. See the [LICENSE](../../blob/main/LICENSE) file.
-

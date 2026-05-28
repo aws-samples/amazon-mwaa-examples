@@ -55,10 +55,10 @@ TASK_INSTANCE_SELECT = "select task_id, dag_id, run_id, custom_operator_name, st
 try_number, hostname, unixname, job_id, pool, queue, priority_weight, \
 operator, queued_dttm, rendered_map_index, pid, max_tries, '\\x' || encode(executor_config,'hex') as executor_config ,\
 pool_slots, queued_by_job_id, external_executor_id, trigger_id ,\
-trigger_timeout, next_method, next_kwargs, map_index, updated_at from task_instance \
+trigger_timeout, next_method, next_kwargs, map_index, executor, updated_at from task_instance \
 where state NOT IN ('running','restarting','queued','scheduled', 'up_for_retry','up_for_reschedule')"
 
-LOG_SELECT = "select dttm, dag_id, task_id, event, execution_date, owner, owner_display_name, run_id, extra from log"
+LOG_SELECT = "select dttm, dag_id, task_id, event, execution_date, owner, owner_display_name, run_id, extra, try_number from log"
 
 TASK_FAIL_SELECT = "select task_id, dag_id, run_id, map_index, start_date, end_date, duration from task_fail"
 
