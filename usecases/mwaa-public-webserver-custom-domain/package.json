@@ -20,7 +20,7 @@
     "@types/aws-lambda": "^8.10.77",
     "@types/cookie": "^0.4.0",
     "@types/fs-extra": "^9.0.11",
-    "@types/node": "^15.12.5",
+    "@types/node": "^20.11.17",
     "aws-sdk": "^2.935.0",
     "html-loader": "^2.1.2",
     "prettier": "^2.3.2",
@@ -32,7 +32,11 @@
     "webpack-cli": "^4.7.2"
   },
   "dependencies": {
+    "@aws-sdk/client-cloudformation": "^3.529.1",
+    "@aws-sdk/client-cognito-identity-provider": "^3.530.0",
+    "@aws-sdk/client-lambda": "^3.529.1",
     "@aws-sdk/client-mwaa": "^3.49.0",
+    "@aws-sdk/client-s3": "^3.529.1",
     "adm-zip": "^0.5.5",
     "aws-jwt-verify": "^1.0.2",
     "cookie": "^0.4.1"

@@ -6,7 +6,7 @@ import {
   CloudFormationCustomResourceDeleteEvent,
   CloudFormationCustomResourceUpdateEvent,
 } from "aws-lambda";
-import Lambda from "aws-sdk/clients/lambda";
+import { Lambda } from "@aws-sdk/client-lambda";
 import Zip from "adm-zip";
 import { writeFileSync, mkdtempSync } from "fs";
 import { resolve } from "path";
@@ -27,15 +27,16 @@ async function updateLambdaCode(
     `Adding configuration to Lambda function ${lambdaFunction}:\n${stringifiedConfig}`
   );
   const region = lambdaFunction.split(":")[3];
-  const lambdaClient = new Lambda({ region });
+  const lambdaClient = new Lambda({
+    region,
+  });
   // Parse the JSON to ensure it's validity (and avoid ugly errors at runtime)
   const config = JSON.parse(stringifiedConfig);
   // Fetch and extract Lambda zip contents to temporary folder, add configuration.json, and rezip
   const { Code } = await lambdaClient
     .getFunction({
       FunctionName: lambdaFunction,
-    })
-    .promise();
+    });
   const data = await fetch(Code!.Location!);
   const lambdaZip = new Zip(data);
   console.log(
@@ -61,8 +62,7 @@ async function updateLambdaCode(
       FunctionName: lambdaFunction,
       ZipFile: newLambdaZip.toBuffer(),
       Publish: true,
-    })
-    .promise();
+    });
   console.log({ CodeSha256, Version, FunctionArn });
   return {
     physicalResourceId: lambdaFunction,
