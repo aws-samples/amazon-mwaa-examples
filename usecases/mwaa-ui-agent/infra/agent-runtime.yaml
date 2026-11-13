@@ -1,0 +1,353 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  MWAA UI agent - an Amazon Bedrock AgentCore Runtime that runs the Agent Toolkit for AWS MWAA skills
+  for one Amazon MWAA environment, and (optionally) lets that environment's execution role invoke it.
+
+Parameters:
+  AgentRuntimeName:
+    Type: String
+    Default: mwaa_ui_agent
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9_]{0,47}"
+    Description: Name of the AgentCore Runtime.
+  MwaaEnvironmentName:
+    Type: String
+    Description: The MWAA environment the agent serves. The agent rejects requests for any other environment.
+  MwaaSourceBucketName:
+    Type: String
+    Description: The environment's S3 bucket (DAGs, plugins, requirements). The agent gets read-only access.
+  AdditionalReadOnlyBucketArns:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: >-
+      Optional bucket ARNs the agent may read, for example where AWS Glue or Amazon EMR scripts live
+      (arn:aws:s3:::my-scripts). Leave empty for none.
+  MwaaExecutionRoleName:
+    Type: String
+    Default: ""
+    Description: >-
+      Optional. Name (not ARN) of the environment's execution role. If set, this stack adds an inline policy to it
+      that allows invoking this runtime, which the plugin needs. Leave empty to add that permission yourself.
+  ArtifactBucket:
+    Type: String
+    Description: Bucket that holds the agent package (dist/agent.zip).
+  ArtifactKey:
+    Type: String
+    Description: Object key of the agent package.
+  ArtifactVersionId:
+    Type: String
+    Default: ""
+    Description: Optional S3 object version of the agent package.
+  ModelId:
+    Type: String
+    Default: global.anthropic.claude-sonnet-5-5
+    Description: Amazon Bedrock model or inference profile ID. Check it is ACTIVE with aws bedrock list-inference-profiles.
+  ModelRegion:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[a-z]{2}(-[a-z]+)+-\\d$"
+    Description: >-
+      Optional. Region where the agent calls Amazon Bedrock. Leave empty to use the stack Region. The model or
+      inference profile must be ACTIVE in this Region.
+  EnabledSkills:
+    Type: String
+    Default: debugging-mwaa-workflow,testing-mwaa-workflow
+    AllowedPattern: "^(debugging-mwaa-workflow|testing-mwaa-workflow|authoring-mwaa-workflow|upgrading-mwaa-environments)(,(debugging-mwaa-workflow|testing-mwaa-workflow|authoring-mwaa-workflow|upgrading-mwaa-environments))*$"
+    Description: >-
+      Comma-separated MWAA skills the agent loads, without spaces. Authoring and upgrading are packaged but their
+      write and sandbox tools are not implemented, so the agent can only advise for those workflows.
+  EnableDagAuthoring:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      Let users with the Op or Admin role deploy DAG files through the agent, each after explicit approval.
+      Adds s3:PutObject on the DAG folder to the agent role and sets ENABLE_DAG_DEPLOY on the runtime.
+      A deployed DAG runs code with the environment's execution role. Use only in development and test.
+      The runtime refuses deployments while the MWAA execution role can invoke it, which is the case
+      whenever the plugin uses that role, so on MWAA this needs a broker with its own role.
+  MwaaDagS3Path:
+    Type: String
+    Default: dags
+    AllowedPattern: "^[A-Za-z0-9][A-Za-z0-9_./-]{0,200}$"
+    Description: The environment's DagS3Path (folder in MwaaSourceBucketName). Used only with EnableDagAuthoring.
+  TeamDagFolders:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: >-
+      Multi-team environments only (Airflow 3.3.1+). ARNs of the team DAG folders the agent may write to with
+      EnableDagAuthoring (for example arn:aws:s3:::acme-airflow/teams/DataEng-TeamA). Leave empty for none.
+      Each must include a folder (arn:aws:s3:::bucket/prefix), never a bare bucket. The agent also checks that
+      the user belongs to the team. Redeploy when teams change.
+
+Conditions:
+  DagAuthoring: !Equals [!Ref EnableDagAuthoring, "true"]
+  HasTeamDagFolders: !Not [!Equals [!Join ["", !Ref TeamDagFolders], ""]]
+  TeamDagAuthoring: !And [!Condition DagAuthoring, !Condition HasTeamDagFolders]
+  # With teams, deploy_dag refuses the global folder, so the global write grant is dropped.
+  GlobalDagAuthoring: !And [!Condition DagAuthoring, !Not [!Condition HasTeamDagFolders]]
+  AttachInvokePolicy: !Not [!Equals [!Ref MwaaExecutionRoleName, ""]]
+  HasModelRegion: !Not [!Equals [!Ref ModelRegion, ""]]
+  HasAdditionalBuckets: !Not [!Equals [!Join ["", !Ref AdditionalReadOnlyBucketArns], ""]]
+  HasArtifactVersion: !Not [!Equals [!Ref ArtifactVersionId, ""]]
+
+Resources:
+  AgentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: !Sub "AgentCore Runtime role for the MWAA UI agent of ${MwaaEnvironmentName}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock-agentcore.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                # Only this runtime (AgentCore appends a generated suffix to the name), not any AgentCore
+                # resource in the account.
+                aws:SourceArn: !Sub "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/${AgentRuntimeName}-*"
+      Policies:
+        - PolicyName: agentcore-runtime-basics
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [logs:DescribeLogStreams, logs:CreateLogGroup]
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/*"
+              - Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*"
+              - Effect: Allow
+                Action: [xray:PutTraceSegments, xray:PutTelemetryRecords, xray:GetSamplingRules, xray:GetSamplingTargets]
+                Resource: "*"
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    cloudwatch:namespace: bedrock-agentcore
+              - Effect: Allow
+                Action: [bedrock-agentcore:GetWorkloadAccessToken, bedrock-agentcore:GetWorkloadAccessTokenForJWT]
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default"
+                  - !Sub "arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:workload-identity-directory/default/workload-identity/${AgentRuntimeName}-*"
+        - PolicyName: model-invocation
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+                # Cross-Region and global inference profiles route to foundation models in other Regions,
+                # so the foundation-model ARNs cannot be pinned to ModelRegion. The profile itself is.
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/*"
+                  - !Sub "arn:${AWS::Partition}:bedrock:::foundation-model/*"
+                  - !Sub
+                    - "arn:${AWS::Partition}:bedrock:${Rgn}:${AWS::AccountId}:inference-profile/${ModelId}"
+                    - Rgn: !If [HasModelRegion, !Ref ModelRegion, !Ref AWS::Region]
+        - PolicyName: mwaa-environment-read
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: Environment
+                Effect: Allow
+                Action: airflow:GetEnvironment
+                Resource: !Sub "arn:${AWS::Partition}:airflow:${AWS::Region}:${AWS::AccountId}:environment/${MwaaEnvironmentName}"
+              - Sid: ListEnvironments # collection-level action, no resource-level support
+                Effect: Allow
+                Action: airflow:ListEnvironments
+                Resource: "*"
+              - Sid: AirflowRestApiAsUserRole
+                # The Airflow role in the resource is the role the agent acts as in Airflow. "User" can read
+                # and trigger/clear runs; the agent's own policy and per-user scoping narrow this further.
+                Effect: Allow
+                Action: airflow:InvokeRestApi
+                Resource: !Sub "arn:${AWS::Partition}:airflow:${AWS::Region}:${AWS::AccountId}:role/${MwaaEnvironmentName}/User"
+              - Sid: EnvironmentLogs
+                Effect: Allow
+                Action: [logs:FilterLogEvents, logs:GetLogEvents, logs:DescribeLogStreams, logs:StartQuery]
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:airflow-${MwaaEnvironmentName}-*"
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:airflow-${MwaaEnvironmentName}-*:*"
+              - Sid: LogsQueryResults # no resource-level support
+                Effect: Allow
+                Action: [logs:GetQueryResults, logs:DescribeLogGroups]
+                Resource: "*"
+              - Sid: EnvironmentBucketList
+                Effect: Allow
+                Action: [s3:ListBucket, s3:GetBucketVersioning]
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${MwaaSourceBucketName}"
+              - Sid: EnvironmentBucketRead
+                Effect: Allow
+                Action: [s3:GetObject, s3:GetObjectVersion]
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${MwaaSourceBucketName}/*"
+              - Sid: Metrics # collection-level actions
+                Effect: Allow
+                Action: [cloudwatch:GetMetricData, cloudwatch:ListMetrics, cloudwatch:DescribeAlarms]
+                Resource: "*"
+        - PolicyName: diagnostics-read
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ExecutionRoleInspection
+                Effect: Allow
+                Action:
+                  - iam:GetRole
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListRolePolicies
+                  - iam:GetRolePolicy
+                  - iam:SimulatePrincipalPolicy
+                # Scoped to the execution role when its name is given (with or without a path such as
+                # service-role/, but not other roles whose names merely end the same); otherwise any role.
+                Resource: !If
+                  - AttachInvokePolicy
+                  - - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${MwaaExecutionRoleName}"
+                    - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*/${MwaaExecutionRoleName}"
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*"
+              - Sid: ManagedPolicyRead
+                Effect: Allow
+                Action: [iam:GetPolicy, iam:GetPolicyVersion]
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/*"
+                  - !Sub "arn:${AWS::Partition}:iam::aws:policy/*"
+              - Sid: DownstreamJobStatus # status of jobs that DAG tasks start
+                Effect: Allow
+                Action:
+                  - glue:GetJob
+                  - glue:GetJobRun
+                  - glue:GetJobRuns
+                  - emr-serverless:GetApplication
+                  - emr-serverless:GetJobRun
+                  - elasticmapreduce:DescribeCluster
+                  - elasticmapreduce:DescribeStep
+                  - elasticmapreduce:ListSteps
+                  - athena:GetQueryExecution
+                  - redshift-data:DescribeStatement
+                  - states:DescribeExecution
+                  - batch:DescribeJobs
+                  - ecs:DescribeTasks
+                  - sagemaker:DescribeTrainingJob
+                  - sagemaker:DescribeProcessingJob
+                Resource: "*"
+              - Sid: NetworkAndAuditRead # collection-level Describe actions
+                Effect: Allow
+                Action:
+                  - ec2:DescribeVpcEndpoints
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeRouteTables
+                  - ec2:DescribeNetworkAcls
+                  - sts:GetCallerIdentity
+                Resource: "*"
+              - !If
+                - HasAdditionalBuckets
+                - Sid: AdditionalBucketRead
+                  Effect: Allow
+                  Action: [s3:ListBucket, s3:GetObject]
+                  Resource: !Split
+                    - ","
+                    - !Join
+                      - ","
+                      - - !Join [",", !Ref AdditionalReadOnlyBucketArns]
+                        - !Join ["", [!Join ["/*,", !Ref AdditionalReadOnlyBucketArns], "/*"]]
+                    # [a, b] -> [a, b, a/*, b/*]
+                - !Ref AWS::NoValue
+              - !If
+                - GlobalDagAuthoring
+                - Sid: DagFolderWrite # deploy_dag only; no delete, and nothing outside the DAG folder
+                  Effect: Allow
+                  Action: s3:PutObject
+                  Resource: !Sub "arn:${AWS::Partition}:s3:::${MwaaSourceBucketName}/${MwaaDagS3Path}/*"
+                - !Ref AWS::NoValue
+              - !If
+                - DagAuthoring
+                - Sid: DagSubfolderWriteDenied # deploy_dag writes only top-level files
+                  Effect: Deny
+                  Action: s3:PutObject
+                  Resource: !Sub "arn:${AWS::Partition}:s3:::${MwaaSourceBucketName}/${MwaaDagS3Path}/*/*"
+                - !Ref AWS::NoValue
+              - !If
+                - HasTeamDagFolders
+                - Sid: TeamDagFolderRead # team users read their own team's DAG folder (code checks membership)
+                  Effect: Allow
+                  Action: [s3:GetObject, s3:GetObjectVersion]
+                  # [arn:aws:s3:::b/teams/A, ...] -> [arn:aws:s3:::b/teams/A/*, ...]
+                  Resource: !Split
+                    - ","
+                    - !Join ["", [!Join ["/*,", !Ref TeamDagFolders], "/*"]]
+                - !Ref AWS::NoValue
+              - !If
+                - TeamDagAuthoring
+                - Sid: TeamDagFolderWrite # deploy_dag(team=...) only
+                  Effect: Allow
+                  Action: s3:PutObject
+                  Resource: !Split
+                    - ","
+                    - !Join ["", [!Join ["/*,", !Ref TeamDagFolders], "/*"]]
+                - !Ref AWS::NoValue
+              - !If
+                - TeamDagAuthoring
+                - Sid: TeamDagSubfolderWriteDenied # deploy_dag writes only top-level files
+                  Effect: Deny
+                  Action: s3:PutObject
+                  Resource: !Split
+                    - ","
+                    - !Join ["", [!Join ["/*/*,", !Ref TeamDagFolders], "/*/*"]]
+                - !Ref AWS::NoValue
+
+  AgentRuntime:
+    Type: AWS::BedrockAgentCore::Runtime
+    Properties:
+      AgentRuntimeName: !Ref AgentRuntimeName
+      Description: !Sub "MWAA UI agent for ${MwaaEnvironmentName}"
+      RoleArn: !GetAtt AgentRole.Arn
+      AgentRuntimeArtifact:
+        CodeConfiguration:
+          Code:
+            S3:
+              Bucket: !Ref ArtifactBucket
+              Prefix: !Ref ArtifactKey
+              VersionId: !If [HasArtifactVersion, !Ref ArtifactVersionId, !Ref AWS::NoValue]
+          EntryPoint: [main.py]
+          Runtime: PYTHON_3_12
+      NetworkConfiguration:
+        NetworkMode: PUBLIC
+      ProtocolConfiguration: HTTP
+      EnvironmentVariables:
+        MWAA_ENV_NAME: !Ref MwaaEnvironmentName
+        MWAA_REGION: !Ref AWS::Region
+        MODEL_ID: !Ref ModelId
+        MODEL_REGION: !If [HasModelRegion, !Ref ModelRegion, !Ref AWS::Region]
+        MWAA_AGENT_SKILLS: !Ref EnabledSkills
+        ENABLE_DAG_DEPLOY: !If [DagAuthoring, "true", "false"]
+        LOG_LEVEL: INFO
+
+  ExecutionRoleInvokePolicy:
+    Type: AWS::IAM::RolePolicy
+    Condition: AttachInvokePolicy
+    Properties:
+      RoleName: !Ref MwaaExecutionRoleName
+      PolicyName: !Sub "invoke-${AgentRuntimeName}"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: bedrock-agentcore:InvokeAgentRuntime
+            Resource:
+              - !GetAtt AgentRuntime.AgentRuntimeArn
+              - !Sub "${AgentRuntime.AgentRuntimeArn}/*"
+
+Outputs:
+  AgentRuntimeArn:
+    Description: Set this as the Airflow configuration option mwaa_agent.runtime_arn.
+    Value: !GetAtt AgentRuntime.AgentRuntimeArn
+  AgentRoleArn:
+    Value: !GetAtt AgentRole.Arn
