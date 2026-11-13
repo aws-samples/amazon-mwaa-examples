@@ -1,0 +1,169 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+# Local security test stack. Only the Airflow UI is published, on 127.0.0.1.
+name: mwaa-ui-agent-local
+
+x-airflow-environment: &airflow-environment
+  AWS_ACCESS_KEY_ID: local
+  AWS_SECRET_ACCESS_KEY: local
+  AWS_REGION: ${AWS_REGION:-eu-west-1}
+  AWS_DEFAULT_REGION: ${AWS_REGION:-eu-west-1}
+  MWAA_LOCAL_RUNNER: "true"
+  GENERATE_BILL_OF_MATERIALS: "False"
+  MWAA__CORE__AUTH_TYPE: testing
+  # Fast DAG folder scans so newly authored DAGs appear within seconds (local only; MWAA defaults are slower).
+  MWAA__CORE__CUSTOM_AIRFLOW_CONFIGS: '{"AIRFLOW__CORE__LOAD_EXAMPLES": "False", "AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL": "10", "AIRFLOW__DAG_PROCESSOR__MIN_FILE_PROCESS_INTERVAL": "10"}'
+  MWAA__CORE__FERNET_KEY: ${FERNET_KEY:?run local/start.sh}
+  MWAA__WEBSERVER__SECRET: '{"secret_key": "${WEBSERVER_SECRET:?run local/start.sh}"}'
+  MWAA__DB__CREDENTIALS: '{"username": "airflow", "password": "${LOCAL_DB_PASSWORD:?run local/start.sh}"}'
+  MWAA__DB__POSTGRES_DB: airflow
+  MWAA__DB__POSTGRES_HOST: postgres
+  MWAA__DB__POSTGRES_PORT: "5432"
+  MWAA__DB__POSTGRES_SSLMODE: prefer
+  MWAA__SQS__CREATE_QUEUE: "True"
+  MWAA__SQS__CUSTOM_ENDPOINT: http://sqs:9324
+  MWAA__SQS__QUEUE_URL: http://sqs:9324/000000000000/celery-queue
+  MWAA__SQS__USE_SSL: "False"
+  MWAA__LOGGING__AIRFLOW_DAGPROCESSOR_LOGS_ENABLED: "false"
+  MWAA__LOGGING__AIRFLOW_SCHEDULER_LOGS_ENABLED: "false"
+  MWAA__LOGGING__AIRFLOW_TRIGGERER_LOGS_ENABLED: "false"
+  MWAA__LOGGING__AIRFLOW_TASK_LOGS_ENABLED: "false"
+  MWAA__LOGGING__AIRFLOW_WEBSERVER_LOGS_ENABLED: "false"
+  MWAA__LOGGING__AIRFLOW_WORKER_LOGS_ENABLED: "false"
+  MWAA__LOGGING__AIRFLOW_DAGPROCESSOR_LOG_LEVEL: INFO
+  MWAA__LOGGING__AIRFLOW_SCHEDULER_LOG_LEVEL: INFO
+  MWAA__LOGGING__AIRFLOW_TRIGGERER_LOG_LEVEL: INFO
+  MWAA__LOGGING__AIRFLOW_TASK_LOG_LEVEL: INFO
+  MWAA__LOGGING__AIRFLOW_WEBSERVER_LOG_LEVEL: INFO
+  MWAA__LOGGING__AIRFLOW_WORKER_LOG_LEVEL: INFO
+  MWAA__CORE__TASK_MONITORING_ENABLED: "false"
+  MWAA__CORE__TERMINATE_IF_IDLE: "false"
+  MWAA__CORE__MWAA_SIGNAL_HANDLING_ENABLED: "false"
+  MWAA__CORE__API_SERVER_URL: http://webserver:8080
+
+x-airflow-common: &airflow-common
+  image: ${MWAA_LOCAL_IMAGE:-amazon-mwaa-docker-images/airflow:3.3.1-base}
+  user: airflow
+  entrypoint: ["python3", "-m", "mwaa.entrypoint"]
+  restart: unless-stopped
+  init: true
+  environment:
+    <<: *airflow-environment
+  volumes:
+    - ./dags:/usr/local/airflow/dags:ro
+    - ./.plugins:/usr/local/airflow/plugins:ro
+    # Shared so the UI can read task logs from disk even after a worker container is replaced.
+    - ./.logs:/usr/local/airflow/logs
+  networks: [airflow-net]
+  depends_on: &airflow-depends-on
+    postgres:
+      condition: service_healthy
+    sqs:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${LOCAL_DB_PASSWORD:?run local/start.sh}
+      POSTGRES_DB: airflow
+    volumes: [postgres-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks: [airflow-net]
+
+  sqs:
+    image: softwaremill/elasticmq:1.7.1
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -S -O - 127.0.0.1:9324/?Action=ListQueues"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks: [airflow-net]
+
+  migratedb:
+    <<: *airflow-common
+    command: migrate-db
+    restart: "no"
+
+  webserver:
+    <<: *airflow-common
+    command: webserver
+    environment:
+      <<: *airflow-environment
+      MWAA__CORE__CUSTOM_AIRFLOW_CONFIGS: >-
+        {"AIRFLOW__CORE__LOAD_EXAMPLES": "False",
+         "AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL": "10",
+         "AIRFLOW__DAG_PROCESSOR__MIN_FILE_PROCESS_INTERVAL": "10",
+         "AIRFLOW__MWAA_AGENT__ENVIRONMENT_NAME": "local",
+         "AIRFLOW__MWAA_AGENT__REGION": "${AWS_REGION:-eu-west-1}",
+         "AIRFLOW__MWAA_AGENT__LOCAL_AGENT_URL": "http://mwaa-agent:8080",
+         "AIRFLOW__MWAA_AGENT__LOCAL_AGENT_TOKEN": "${LOCAL_AGENT_TOKEN:?run local/start.sh}"}
+    volumes:
+      - ./dags:/usr/local/airflow/dags:ro
+      - ./.plugins:/usr/local/airflow/plugins:ro
+      - ./.logs:/usr/local/airflow/logs
+    networks: [airflow-net, agent-net]
+    ports: ["127.0.0.1:${LOCAL_UI_PORT:-8080}:8080"]
+    depends_on:
+      <<: *airflow-depends-on
+      migratedb:
+        condition: service_completed_successfully
+
+  scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      <<: *airflow-depends-on
+      migratedb:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *airflow-common
+    command: worker
+    depends_on:
+      <<: *airflow-depends-on
+      migratedb:
+        condition: service_completed_successfully
+
+  mwaa-agent:
+    build:
+      context: ..
+      dockerfile: agent/Dockerfile
+    env_file: [.env.aws]
+    environment:
+      MWAA_ENV_NAME: local
+      MWAA_REGION: ${AWS_REGION:-eu-west-1}
+      AWS_REGION: ${AWS_REGION:-eu-west-1}
+      AWS_DEFAULT_REGION: ${AWS_REGION:-eu-west-1}
+      MODEL_ID: ${MODEL_ID:-global.anthropic.claude-sonnet-5-5}
+      AIRFLOW_API_BASE_URL: http://webserver:8080
+      AIRFLOW_API_USERNAME: admin
+      AIRFLOW_API_PASSWORD: ${LOCAL_AIRFLOW_PASSWORD:?run local/start.sh}
+      LOCAL_INVOCATION_TOKEN: ${LOCAL_AGENT_TOKEN:?run local/start.sh}
+      # DAG authoring: the only writable path is dags/authored, which Airflow reads through its read-only dags mount.
+      ENABLE_DAG_DEPLOY: "true"
+      MWAA_AGENT_LOCAL_DAGS_DIR: /authored
+      MWAA_AGENT_SKILLS: debugging-mwaa-workflow,testing-mwaa-workflow,authoring-mwaa-workflow
+    volumes:
+      - ./dags/authored:/authored
+    networks: [agent-net]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+networks:
+  airflow-net:
+    internal: true
+  agent-net:
+
+volumes:
+  postgres-db:

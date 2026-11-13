@@ -14,3 +14,4 @@ Complete set of sample use cases including documentation, infrastructure as code
 4. [Amazon MWAA custom domain for public webserver](mwaa-public-webserver-custom-domain)
 5. [Amazon MWAA in private VPC with Amazon Cognito](mwaa-cognito-cdk)
 6. [Stop and Start MWAA](start-stop-mwaa-environment)
+7. [AI agent in the Airflow UI for debugging, testing, and authoring DAGs](mwaa-ui-agent)

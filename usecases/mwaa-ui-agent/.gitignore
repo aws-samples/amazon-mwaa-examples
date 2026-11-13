@@ -1,0 +1,11 @@
+build/
+dist/
+__pycache__/
+*.pyc
+.pytest_cache/
+local/.env
+local/.env.aws
+local/.auth/
+local/.plugins/
+local/dags/authored/
+local/.logs/

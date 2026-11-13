@@ -1,0 +1,4 @@
+strands-agents==1.63.0
+bedrock-agentcore==1.25.3
+boto3==1.43.123
+ruff==0.17.5

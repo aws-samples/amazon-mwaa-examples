@@ -1,0 +1,11 @@
+{
+  "toolkit_repo": "https://github.com/aws/agent-toolkit-for-aws.git",
+  "toolkit_ref": "174379354c7c93f9e80249265f3fffa67a42f0c1",
+  "skills_path": "plugins/aws-data-analytics/skills",
+  "skills": [
+    "authoring-mwaa-workflow",
+    "debugging-mwaa-workflow",
+    "testing-mwaa-workflow",
+    "upgrading-mwaa-environments"
+  ]
+}

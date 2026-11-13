@@ -1,0 +1,48 @@
+<!doctype html>
+<!-- Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+     SPDX-License-Identifier: MIT-0 -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MWAA AI Agent</title>
+    <link rel="stylesheet" href="static/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="bar">
+        <div class="title">
+          <h1>AI Agent</h1>
+          <span id="env" class="muted"></span>
+        </div>
+        <div class="bar-right">
+          <span id="tier" class="badge" hidden></span>
+          <button id="new-chat" type="button" class="secondary">New chat</button>
+        </div>
+      </header>
+
+      <p id="context" class="context muted"></p>
+      <div id="banner" class="banner" role="alert" hidden></div>
+
+      <main id="messages" class="messages" aria-live="polite" aria-label="Conversation"></main>
+
+      <div id="suggestions" class="suggestions" aria-label="Suggested questions"></div>
+
+      <form id="composer" class="composer">
+        <label for="input" class="visually-hidden">Message the agent</label>
+        <textarea
+          id="input"
+          rows="2"
+          maxlength="20000"
+          placeholder="Ask about a failure, or ask the agent to test a DAG…"
+        ></textarea>
+        <button id="send" type="submit">Send</button>
+      </form>
+      <p class="footnote muted">
+        The agent reads logs and code to answer. It asks before it triggers, clears, or pauses anything.
+        Answers can be wrong; check the evidence it cites.
+      </p>
+    </div>
+    <script src="static/app.js"></script>
+  </body>
+</html>
