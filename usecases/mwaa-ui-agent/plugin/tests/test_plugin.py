@@ -270,6 +270,7 @@ class FakeAuthManager:
         global_read=False,
         can_edit_connections=False,
         entity_rights=None,
+        roles_rights=("POST", "PUT"),
     ):
         self.readable, self.editable, self.can_create_runs, self.global_read = (
             readable,
@@ -278,6 +279,8 @@ class FakeAuthManager:
             global_read,
         )
         self.can_edit_connections = can_edit_connections
+        # The methods allowed on the "Roles" custom view: both mean administrator rights.
+        self.roles_rights = roles_rights
         # (method, access_entity) -> bool for task-instance and DAG-run checks; defaults to can_create_runs.
         self.entity_rights = entity_rights or {}
 
@@ -291,6 +294,11 @@ class FakeAuthManager:
 
     def is_authorized_connection(self, method, user, details=None):
         return self.can_edit_connections
+
+    def is_authorized_custom_view(self, *, method, resource_name, user):
+        if isinstance(self.roles_rights, Exception):
+            raise self.roles_rights
+        return resource_name == "Roles" and method in self.roles_rights
 
 
 @pytest.mark.parametrize(
@@ -308,6 +316,59 @@ def test_dag_deploy_needs_operate_and_connection_rights(
     )
     user = SimpleNamespace(get_id=lambda: 7, get_name=lambda: "bob")
     assert access_mod.resolve_access(user).can_deploy_dags is expected
+
+
+@pytest.mark.parametrize(
+    "roles_rights,expected",
+    [
+        (("POST", "PUT"), True),  # can create and edit roles: an administrator
+        (("POST",), False),  # create alone is not enough
+        (("PUT",), False),
+        (
+            (),
+            False,
+        ),  # an Op role: can run DAGs and create connections, cannot manage roles
+        (
+            RuntimeError("no such view"),
+            False,
+        ),  # an auth manager that fails: fail closed
+        (NotImplementedError(), False),
+    ],
+)
+def test_dag_deploy_needs_administrator_rights(monkeypatch, roles_rights, expected):
+    # Operate rights and connection rights are not enough: an Op role has both, and an operator can give
+    # any role to anyone. Administrator means able to create and edit roles.
+    monkeypatch.setattr(
+        access_mod,
+        "get_auth_manager",
+        lambda: FakeAuthManager(
+            {"a"},
+            {"a"},
+            True,
+            True,
+            can_edit_connections=True,
+            roles_rights=roles_rights,
+        ),
+    )
+    user = SimpleNamespace(get_id=lambda: 7, get_name=lambda: "op-user")
+    access = access_mod.resolve_access(user)
+    assert access.can_deploy_dags is expected
+    assert access.tier == "operate"  # everything else about an Op user is unchanged
+
+
+def test_dag_deploy_is_refused_when_the_auth_manager_has_no_custom_views(monkeypatch):
+    class WithoutCustomViews(FakeAuthManager):
+        is_authorized_custom_view = (
+            None  # calling it raises TypeError, like a manager that lacks the check
+        )
+
+    monkeypatch.setattr(
+        access_mod,
+        "get_auth_manager",
+        lambda: WithoutCustomViews({"a"}, {"a"}, True, True, can_edit_connections=True),
+    )
+    user = SimpleNamespace(get_id=lambda: 7, get_name=lambda: "bob")
+    assert access_mod.resolve_access(user).can_deploy_dags is False
 
 
 @pytest.mark.parametrize(

@@ -62,7 +62,7 @@ Parameters:
     Default: "false"
     AllowedValues: ["true", "false"]
     Description: >-
-      Let users with the Op or Admin role deploy DAG files through the agent, each after explicit approval.
+      Let Airflow administrators deploy DAG files through the agent, each after explicit approval.
       Adds s3:PutObject on the DAG folder to the agent role and sets ENABLE_DAG_DEPLOY on the runtime.
       A deployed DAG runs code with the environment's execution role. Use only in development and test.
       The runtime refuses deployments while the MWAA execution role can invoke it, which is the case

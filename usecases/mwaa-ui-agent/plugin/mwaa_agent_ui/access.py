@@ -48,6 +48,26 @@ def _multi_team_enabled() -> bool:
         return False
 
 
+def _administers_roles(auth_manager, user: BaseUser) -> bool:
+    """True if the user can create and edit Airflow roles, which makes them an administrator in effect.
+
+    Whoever can create and edit roles can grant themselves any permission, so this does not depend on what a
+    role is called or on what an operator has put into it. With the FAB auth manager it checks the "Roles"
+    permissions, which only the Admin role has by default. The AWS (Identity Center) auth manager answers it
+    from its own policies, and an auth manager that cannot answer, or fails, gives no. The simple auth manager
+    (the local stack) answers yes for everyone, but there every user is an admin.
+    """
+    try:
+        return all(
+            auth_manager.is_authorized_custom_view(
+                method=method, resource_name="Roles", user=user
+            )
+            for method in ("POST", "PUT")
+        )
+    except Exception:  # noqa: BLE001 - fail closed on an auth manager without this check
+        return False
+
+
 def _user_teams(auth_manager, user: BaseUser) -> frozenset[str]:
     try:
         return frozenset(auth_manager.get_authorized_teams(user=user, method="GET"))
@@ -75,9 +95,10 @@ def resolve_access(user: BaseUser) -> UserAccess:
     # Triggering needs both "create DAG runs" and edit rights on the DAG itself.
     runnable = (editable & readable) if can_create_runs else frozenset()
 
-    # A deployed DAG file runs arbitrary code on the workers, and Airflow has no "upload DAG" permission.
-    # Require the operate tier, edit rights on every DAG, and permission to create connections, which only
-    # Op and Admin have in the FAB auth manager (OP and above in the simple auth manager).
+    # A deployed DAG file runs arbitrary code on the workers, with the environment's execution role, and Airflow
+    # has no "upload DAG" permission. Operate rights are not enough: an operator can give any role to anyone.
+    # Deploying needs the operate tier, edit rights on every DAG, permission to create connections, and
+    # administrator rights (see _administers_roles).
     can_deploy_dags = bool(
         runnable
         and (
@@ -87,6 +108,7 @@ def resolve_access(user: BaseUser) -> UserAccess:
             else auth_manager.is_authorized_dag(method="PUT", user=user)
         )
         and auth_manager.is_authorized_connection(method="POST", user=user)
+        and _administers_roles(auth_manager, user)
     )
     # Clearing tasks and setting task state need PUT on task instances; setting run state needs PUT on
     # DAG runs. The agent calls Airflow as the built-in User role, which has both, so a custom role without

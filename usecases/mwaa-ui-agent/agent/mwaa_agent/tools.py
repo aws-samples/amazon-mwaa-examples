@@ -432,7 +432,8 @@ def check_dag_deploy(
         )
     if not ctx.scope.can_deploy_dags:
         raise dag_deploy.DagDeployError(
-            "this user cannot deploy DAGs; it needs edit rights on all DAGs and the Op or Admin role"
+            "this user cannot deploy DAGs; it needs edit rights on all DAGs and administrator rights "
+            "(permission to create and edit roles)"
         )
     if ctx.dag_deploy_mode != "s3_with_approval":
         raise dag_deploy.DagDeployError(

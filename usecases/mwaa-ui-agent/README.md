@@ -98,6 +98,28 @@ in Airflow 3: FastAPI and Boto3. The agent and its dependencies run outside MWAA
 on AgentCore Runtime. An MWAA restart or upgrade therefore does not host the
 agent process itself.
 
+### How the agent reaches Airflow
+
+On Amazon MWAA the agent never connects to the webserver. It calls the Amazon
+MWAA `InvokeRestApi` API with the AgentCore runtime's own IAM role (the
+`airflow:InvokeRestApi` statement scoped to the environment's `User` role in
+`infra/agent-runtime.yaml`), and the MWAA service forwards the call to Airflow.
+The environment name is fixed on the runtime (`MWAA_ENV_NAME`), so there is no
+IP address or hostname to configure.
+
+The local runner works differently. Docker Compose sets `AIRFLOW_API_BASE_URL`
+on the agent container to the Compose service name (`http://webserver:8080`),
+which resolves on the Compose network, and the agent signs in with the local
+admin account. That variable is not set on the AgentCore runtime, so
+`LocalBackend` is never used there. When it is set, the agent also turns off its
+AWS tools. The `127.0.0.1`, `localhost`, and `webserver` hosts that the local
+backend accepts exist only so that the agent can run as a plain process on a
+developer machine or in Compose.
+
+The plugin reaches the local agent in the same way, through
+`mwaa_agent.local_agent_url` (the Compose service `mwaa-agent`), and reaches
+AgentCore through `mwaa_agent.runtime_arn` on MWAA.
+
 ### Airflow UI compatibility
 
 | Airflow version  | UI integration                                                         |
@@ -485,10 +507,17 @@ tool. It is off by default. Turning it on needs both layers:
   `<source-bucket>/<DagS3Path>/*` to the agent role (no delete), sets
   `ENABLE_DAG_DEPLOY=true` on the runtime, and loads the
   `authoring-mwaa-workflow` skill.
-- **User:** the signed-in user must have the `operate` tier, edit rights on all
-  DAGs, and permission to create connections. With the FAB auth manager on MWAA,
-  that means the Op or Admin role. A DAG file runs arbitrary code with the
-  environment's execution role, so the User role cannot deploy DAGs.
+- **User:** the signed-in user must be an administrator. A DAG file runs
+  arbitrary code with the environment's execution role, and Airflow has no
+  "upload DAG" permission, so the plugin requires all of: the `operate` tier,
+  edit rights on all DAGs, permission to create connections, and permission to
+  create and edit roles. Whoever can create and edit roles can give themselves
+  any permission, so this does not depend on role names or on how an operator
+  has configured the Op role. With the FAB auth manager that is the Admin role
+  by default. The AWS (IAM Identity Center) auth manager answers from its own
+  policies, and any auth manager that cannot answer, or fails, means no. The
+  local runner's simple auth manager has no administrator concept, and every
+  user there is an admin.
 
 Every deployment is shown for approval with the target location, size,
 SHA-256 checksum, whether it replaces an existing file, and the complete file

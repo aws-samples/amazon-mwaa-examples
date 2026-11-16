@@ -17,7 +17,7 @@
 #   MODEL_ID            Bedrock model or inference profile ID
 #   MODEL_REGION        Region for Bedrock calls (defaults to the stack Region)
 #   ENABLED_SKILLS      comma-separated skills (default debugging-mwaa-workflow,testing-mwaa-workflow)
-#   ENABLE_DAG_AUTHORING=true      let Op/Admin users deploy DAG files after approval (dev/test only);
+#   ENABLE_DAG_AUTHORING=true      let Airflow administrators deploy DAG files after approval (dev/test only);
 #                                  grants s3:PutObject on the DAG folder and adds the authoring skill
 set -euo pipefail
 
