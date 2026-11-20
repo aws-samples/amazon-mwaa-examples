@@ -4,6 +4,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from mwaa_agent import policy
 from mwaa_agent.approval import DECLINED_MESSAGE, ApprovalHook
 from mwaa_agent.context import RequestError, parse_request
 from mwaa_agent.prompts import frame_message
@@ -32,6 +33,39 @@ def test_parse_edit_permissions_need_operate_tier_and_true():
     framed = frame_message(parse_request(payload()).context, "hi")
     assert "trigger runs, pause or unpause DAGs (with approval)" in framed
     assert "does not allow the other run and task changes" in framed
+
+
+@pytest.mark.parametrize("value", [None, "", "false", "yes"])
+def test_operate_request_is_read_only_unless_the_runtime_enables_operations(
+    monkeypatch, value
+):
+    # The tier comes from the payload, which any caller of the runtime can forge, so the runtime's own
+    # setting decides. Off by default (EnableAirflowOperations=false).
+    if value is None:
+        monkeypatch.delenv("ENABLE_AIRFLOW_OPERATIONS", raising=False)
+    else:
+        monkeypatch.setenv("ENABLE_AIRFLOW_OPERATIONS", value)
+    ctx = parse_request(
+        payload(
+            context={
+                "can_deploy_dags": True,
+                "can_edit_task_instances": True,
+                "can_edit_runs": True,
+            }
+        )
+    ).context
+    scope = ctx.scope
+    assert ctx.operations_enabled is False
+    assert scope.tier == "read" and not scope.can_run("etl")
+    assert not (
+        scope.can_deploy_dags or scope.can_edit_task_instances or scope.can_edit_runs
+    )
+    assert scope.can_read("etl")  # reads are unchanged
+    decision = policy.check_airflow(scope, "POST", "/dags/etl/dagRuns", {"conf": {}})
+    assert not decision.allowed
+    framed = frame_message(ctx, "trigger etl")
+    assert "Airflow operations are turned off on this agent runtime" in framed
+    assert "trigger runs" not in framed
 
 
 @pytest.mark.parametrize(

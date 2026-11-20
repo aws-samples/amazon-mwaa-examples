@@ -102,8 +102,10 @@ agent process itself.
 
 On Amazon MWAA the agent never connects to the webserver. It calls the Amazon
 MWAA `InvokeRestApi` API with the AgentCore runtime's own IAM role (the
-`airflow:InvokeRestApi` statement scoped to the environment's `User` role in
-`infra/agent-runtime.yaml`), and the MWAA service forwards the call to Airflow.
+`airflow:InvokeRestApi` statement in `infra/agent-runtime.yaml`), and the MWAA
+service forwards the call to Airflow. That statement names the Airflow role the
+agent acts as: `Viewer` by default, or `User` when the stack is deployed with
+`EnableAirflowOperations=true` (see [Authorization tiers](#authorization-tiers)).
 The environment name is fixed on the runtime (`MWAA_ENV_NAME`), so there is no
 IP address or hostname to configure.
 
@@ -323,7 +325,8 @@ Optional deployment variables:
 | `MODEL_REGION`                | Stack Region                         | Region for Bedrock calls; the model must be `ACTIVE` there            |
 | `ENABLED_SKILLS`              | Debugging and testing                | Comma-separated skills to load; see the note below                    |
 | `ATTACH_TO_EXECUTION_ROLE`    | `false`                              | If `true`, adds the runtime invoke policy to the MWAA execution role  |
-| `ENABLE_DAG_AUTHORING`        | `false`                              | If `true`, enables [DAG authoring](#dag-authoring); dev and test only |
+| `ENABLE_AIRFLOW_OPERATIONS`   | `false`                              | If `true`, the agent can trigger, clear and pause runs; dev and test only |
+| `ENABLE_DAG_AUTHORING`        | `false`                              | If `true`, enables [DAG authoring](#dag-authoring); needs `ENABLE_AIRFLOW_OPERATIONS`; dev and test only |
 
 `ENABLED_SKILLS` accepts `debugging-mwaa-workflow`, `testing-mwaa-workflow`,
 `authoring-mwaa-workflow`, and `upgrading-mwaa-environments`. The
@@ -493,6 +496,16 @@ The built-in User, Op and Admin roles have both. A custom role without them
 cannot gain them through the agent, even though the agent calls Airflow as the
 User role.
 
+**Operations are off by default.** The `operate` tier applies only when the
+runtime is deployed with `EnableAirflowOperations=true`
+(`ENABLE_AIRFLOW_OPERATIONS=true ./scripts/deploy-agent.sh`). Otherwise the
+agent calls Airflow as the `Viewer` role and treats every user as `read`,
+whatever tier the request claims: the runtime cannot tell a request from the
+plugin from a forged one (see
+[Shared execution-role trust boundary](#shared-execution-role-trust-boundary)),
+so it does not take the tier's word for it. The local stack turns operations on,
+because only the local plugin can reach its agent.
+
 The browser does not choose its tier or DAG set. The server derives both values
 from the authenticated Airflow user.
 
@@ -501,7 +514,8 @@ from the authenticated Airflow user.
 When enabled, the agent can write a DAG and deploy it with the `deploy_dag`
 tool. It is off by default. Turning it on needs both layers:
 
-- **Runtime:** `ENABLE_DAG_AUTHORING=true ./scripts/deploy-agent.sh` sets the
+- **Runtime:** `ENABLE_AIRFLOW_OPERATIONS=true ENABLE_DAG_AUTHORING=true
+  ./scripts/deploy-agent.sh` sets the
   `EnableDagAuthoring` stack parameter. That adds `s3:PutObject` on
   `<source-bucket>/<DagS3Path>/*` to the agent role (no delete), sets
   `ENABLE_DAG_DEPLOY=true` on the runtime, and loads the
@@ -818,9 +832,9 @@ On Linux, open `http://127.0.0.1:8080` in your browser manually.
 The local image forces its simple auth manager to make every user an admin
 (`SIMPLE_AUTH_MANAGER_ALL_ADMINS` is an essential setting that cannot be
 overridden), so locally the agent calls Airflow as admin, while on MWAA it
-calls Airflow as the User role. The agent's route policy only uses routes the
-User role can reach, but test role-specific behavior, such as a Viewer badge or
-a custom role, on an MWAA environment.
+calls Airflow as the Viewer role (or User, with operations on). The agent's
+route policy only uses routes the User role can reach, but test role-specific
+behavior, such as a Viewer badge or a custom role, on an MWAA environment.
 
 The test stack contains:
 
@@ -1003,8 +1017,10 @@ The runtime's deterministic tool policy limits the resulting actions, but it
 cannot prove that the request originated from a signed-in Airflow user. This is
 the main reason the current architecture is not approved for production. As a
 stop-gap, the runtime refuses DAG deployment while the execution role can
-invoke it (see [DAG authoring](#dag-authoring)); triggering, clearing and
-pausing runs remain exposed to forged requests.
+invoke it (see [DAG authoring](#dag-authoring)), and by default it does not
+change Airflow state at all: it calls Airflow as the `Viewer` role and serves
+every request read-only. With `EnableAirflowOperations=true`, triggering,
+clearing and pausing runs are exposed to forged requests on every DAG.
 
 For production, put an authenticated broker between MWAA and AgentCore. The
 broker must:
@@ -1019,8 +1035,9 @@ broker must:
 
 Review `infra/agent-runtime.yaml` against your environment before deployment:
 
-- The runtime uses the Airflow `User` role across the environment. Per-user DAG
-  scope is enforced in code, not IAM.
+- The runtime uses the Airflow `Viewer` role across the environment, or `User`
+  with `EnableAirflowOperations=true`. Per-user DAG scope is enforced in code,
+  not IAM.
 - Several downstream status APIs require `Resource: "*"` or are currently
   granted account-wide. Remove services you do not use and add resource, tag, or
   name-prefix conditions where supported.

@@ -51,6 +51,16 @@ Parameters:
     Description: >-
       Comma-separated MWAA skills the agent loads, without spaces. Authoring and upgrading are packaged but their
       write and sandbox tools are not implemented, so the agent can only advise for those workflows.
+  EnableAirflowOperations:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      Let the agent change Airflow state (trigger, clear and pause runs, set run and task states), each after
+      explicit approval. Off by default: the agent calls Airflow as the Viewer role and serves every user
+      read-only. When true, it calls Airflow as the User role. Any caller that can invoke the runtime, including
+      DAG tasks when the MWAA execution role can, could then make these changes on any DAG, so use true only in
+      development and test, or behind an authenticated broker (see the README).
   EnableDagAuthoring:
     Type: String
     Default: "false"
@@ -59,6 +69,7 @@ Parameters:
       Let Airflow administrators deploy DAG files through the agent, each after explicit approval.
       Adds s3:PutObject on the DAG folder to the agent role and sets ENABLE_DAG_DEPLOY on the runtime.
       A deployed DAG runs code with the environment's execution role. Use only in development and test.
+      Needs EnableAirflowOperations.
       The runtime refuses deployments while the MWAA execution role can invoke it, which is the case
       whenever the plugin uses that role, so on MWAA this needs a broker with its own role.
   MwaaDagS3Path:
@@ -75,7 +86,15 @@ Parameters:
       Each must include a folder (arn:aws:s3:::bucket/prefix), never a bare bucket. The agent also checks that
       the user belongs to the team. Redeploy when teams change.
 
+Rules:
+  DagAuthoringNeedsAirflowOperations:
+    RuleCondition: !Equals [!Ref EnableDagAuthoring, "true"]
+    Assertions:
+      - Assert: !Equals [!Ref EnableAirflowOperations, "true"]
+        AssertDescription: EnableDagAuthoring needs EnableAirflowOperations, because deploying a DAG is an operation.
+
 Conditions:
+  AirflowOperations: !Equals [!Ref EnableAirflowOperations, "true"]
   DagAuthoring: !Equals [!Ref EnableDagAuthoring, "true"]
   HasTeamDagFolders: !Not [!Equals [!Join ["", !Ref TeamDagFolders], ""]]
   TeamDagAuthoring: !And [!Condition DagAuthoring, !Condition HasTeamDagFolders]
@@ -158,12 +177,15 @@ Resources:
                 Effect: Allow
                 Action: airflow:ListEnvironments
                 Resource: "*"
-              - Sid: AirflowRestApiAsUserRole
-                # The Airflow role in the resource is the role the agent acts as in Airflow. "User" can read
-                # and trigger/clear runs; the agent's own policy and per-user scoping narrow this further.
+              - Sid: AirflowRestApi
+                # The Airflow role in the resource is the role the agent acts as in Airflow. "Viewer" can only
+                # read. "User" can also trigger and clear runs; the agent's own policy and per-user scoping
+                # narrow it further, but a forged request is not narrowed by anything else.
                 Effect: Allow
                 Action: airflow:InvokeRestApi
-                Resource: !Sub "arn:${AWS::Partition}:airflow:${AWS::Region}:${AWS::AccountId}:role/${MwaaEnvironmentName}/User"
+                Resource: !Sub
+                  - "arn:${AWS::Partition}:airflow:${AWS::Region}:${AWS::AccountId}:role/${MwaaEnvironmentName}/${AirflowRole}"
+                  - AirflowRole: !If [AirflowOperations, User, Viewer]
               - Sid: EnvironmentLogs
                 Effect: Allow
                 Action: [logs:FilterLogEvents, logs:GetLogEvents, logs:DescribeLogStreams, logs:StartQuery]
@@ -307,6 +329,7 @@ Resources:
         MODEL_ID: !Ref ModelId
         MODEL_REGION: !If [HasModelRegion, !Ref ModelRegion, !Ref AWS::Region]
         MWAA_AGENT_SKILLS: !Ref EnabledSkills
+        ENABLE_AIRFLOW_OPERATIONS: !If [AirflowOperations, "true", "false"]
         ENABLE_DAG_DEPLOY: !If [DagAuthoring, "true", "false"]
         LOG_LEVEL: INFO
 

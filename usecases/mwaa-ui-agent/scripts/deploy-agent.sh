@@ -16,8 +16,11 @@
 #   MODEL_ID            Bedrock model or inference profile ID
 #   MODEL_REGION        Region for Bedrock calls (defaults to the stack Region)
 #   ENABLED_SKILLS      comma-separated skills (default debugging-mwaa-workflow,testing-mwaa-workflow)
+#   ENABLE_AIRFLOW_OPERATIONS=true let the agent trigger, clear and pause runs after approval (dev/test only);
+#                                  without it the agent calls Airflow as Viewer and is read-only for everyone
 #   ENABLE_DAG_AUTHORING=true      let Airflow administrators deploy DAG files after approval (dev/test only);
-#                                  grants s3:PutObject on the DAG folder and adds the authoring skill
+#                                  grants s3:PutObject on the DAG folder and adds the authoring skill.
+#                                  Needs ENABLE_AIRFLOW_OPERATIONS=true
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -28,6 +31,10 @@ export AWS_DEFAULT_REGION="$REGION"
 STACK_NAME="${STACK_NAME:-mwaa-ui-agent-${MWAA_ENV_NAME}}"
 ZIP="$ROOT/dist/agent.zip"
 [[ -f "$ZIP" && ! -L "$ZIP" ]] || { echo "Build first (regular non-symlink file required): scripts/build-agent.sh" >&2; exit 1; }
+if [[ "${ENABLE_DAG_AUTHORING:-false}" == "true" && "${ENABLE_AIRFLOW_OPERATIONS:-false}" != "true" ]]; then
+  echo "ENABLE_DAG_AUTHORING=true needs ENABLE_AIRFLOW_OPERATIONS=true" >&2
+  exit 1
+fi
 
 env_json="$(aws mwaa get-environment --name "$MWAA_ENV_NAME" --output json)"
 SOURCE_BUCKET="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Environment"]["SourceBucketArn"].split(":::")[1])' <<<"$env_json")"
@@ -74,6 +81,11 @@ params=(
   "ArtifactVersionId=${VERSION_ID}"
 )
 [[ "${ATTACH_TO_EXECUTION_ROLE:-false}" == "true" ]] && params+=("MwaaExecutionRoleName=${EXEC_ROLE_NAME}")
+if [[ "${ENABLE_AIRFLOW_OPERATIONS:-false}" == "true" ]]; then
+  params+=("EnableAirflowOperations=true")
+else
+  params+=("EnableAirflowOperations=false")
+fi
 [[ -n "${MODEL_ID:-}" ]] && params+=("ModelId=${MODEL_ID}")
 [[ -n "${MODEL_REGION:-}" ]] && params+=("ModelRegion=${MODEL_REGION}")
 if [[ "${ENABLE_DAG_AUTHORING:-false}" == "true" ]]; then

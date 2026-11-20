@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 
-from .policy import TIER_OPERATE, TIERS, AccessScope
+from .policy import TIER_OPERATE, TIER_READ, TIERS, AccessScope
 
 MAX_MESSAGE_CHARS = 20_000
 MAX_DAG_IDS = 5_000
@@ -20,6 +21,15 @@ _INTERRUPT_ID = re.compile(r"^[A-Za-z0-9:_.\-]{1,300}$")
 
 class RequestError(ValueError):
     """The payload does not match the contract."""
+
+
+def airflow_operations_enabled() -> bool:
+    """Whether this runtime may change Airflow state (trigger, clear, pause, set states, deploy DAGs).
+
+    Off unless the deployment turns it on (EnableAirflowOperations). The tier in the request comes from the
+    plugin, and any caller that can invoke the runtime can forge it, so the runtime decides this itself.
+    """
+    return os.environ.get("ENABLE_AIRFLOW_OPERATIONS", "").lower() == "true"
 
 
 @dataclass
@@ -60,6 +70,8 @@ class SessionContext:
     scope: AccessScope
     page: PageContext = field(default_factory=PageContext)
     dag_deploy_mode: str = "s3_with_approval"
+    # False when the runtime has Airflow operations turned off, so operate users are served read-only.
+    operations_enabled: bool = True
 
 
 @dataclass
@@ -129,6 +141,9 @@ def parse_request(payload: dict) -> AgentRequest:
     tier = ctx.get("tier")
     if tier not in TIERS:
         raise RequestError(f"'tier' must be one of {TIERS}")
+    operations_enabled = airflow_operations_enabled()
+    if not operations_enabled:
+        tier = TIER_READ  # and so no deploy or edit rights below
     scope = AccessScope(
         tier=tier,
         all_dags_readable=ctx.get("all_dags_readable") is True,
@@ -172,6 +187,7 @@ def parse_request(payload: dict) -> AgentRequest:
         dag_deploy_mode=_str(
             ctx.get("dag_deploy_mode") or "s3_with_approval", "dag_deploy_mode", 32
         ),
+        operations_enabled=operations_enabled,
     )
 
     kind = payload.get("type")

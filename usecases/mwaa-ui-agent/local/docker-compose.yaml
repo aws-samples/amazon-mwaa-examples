@@ -147,6 +147,8 @@ services:
       AIRFLOW_API_USERNAME: admin
       AIRFLOW_API_PASSWORD: ${LOCAL_AIRFLOW_PASSWORD:?run local/start.sh}
       LOCAL_INVOCATION_TOKEN: ${LOCAL_AGENT_TOKEN:?run local/start.sh}
+      # Only the local plugin can call this agent (it needs LOCAL_INVOCATION_TOKEN), so operations are on.
+      ENABLE_AIRFLOW_OPERATIONS: "true"
       # DAG authoring: the only writable path is dags/authored, which Airflow reads through its read-only dags mount.
       ENABLE_DAG_DEPLOY: "true"
       MWAA_AGENT_LOCAL_DAGS_DIR: /authored

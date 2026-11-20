@@ -175,6 +175,13 @@ def frame_message(ctx: SessionContext, text: str) -> str:
             permissions += f" {blocked}."
         else:
             permissions += " DAG deployment is not available to this user."
+    elif not ctx.operations_enabled:
+        permissions = (
+            "Airflow operations are turned off on this agent runtime, so you can investigate but not "
+            "trigger, clear, pause or change runs, whatever the user's Airflow role. If they ask for a "
+            "change, tell them what to do in the Airflow UI; an administrator can turn operations on "
+            "with the EnableAirflowOperations deployment parameter."
+        )
     else:
         permissions = "The user has read-only access: you can investigate but not trigger or change runs."
     if not scope.all_dags_readable:
