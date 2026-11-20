@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import os
 import re
 import threading
@@ -34,6 +36,38 @@ _BOTO_CONFIG = Config(
     retries={"max_attempts": 4, "mode": "adaptive"}, read_timeout=60, connect_timeout=10
 )
 ContextGetter = Callable[[], SessionContext]
+# One line per executed change, in the runtime's CloudWatch log group. Airflow's own audit log names only the
+# agent's Airflow role, so this is where the user behind each change is recorded.
+AUDIT_LOG = logging.getLogger("mwaa_agent.audit")
+
+
+def _sha256_json(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def audit(ctx: SessionContext, event: str, outcome: str, **fields: Any) -> None:
+    """Log one executed change: who it was for, what it was, and whether it worked.
+
+    The user comes from the request, so on a runtime that a forged request can reach it is attribution, not
+    proof (see the README's shared execution-role trust boundary).
+    """
+    AUDIT_LOG.info(
+        "%s",
+        json.dumps(
+            {
+                "audit": event,
+                "environment": ctx.environment_name,
+                "user_id": ctx.user_id,
+                "user_name": ctx.user_name,
+                **fields,
+                "outcome": outcome,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+    )
 
 
 def _to_json(value: Any) -> str:
@@ -1094,9 +1128,22 @@ def build_tools(
         method_u = method.upper()
         if method_u not in ("GET", "POST", "PATCH"):
             return _deny("only GET, POST and PATCH are allowed")
+        if method_u != "GET":
+            # The same note the approval card showed (ApprovalHook adds it the same way).
+            body = policy.with_audit_note(method_u, path, body, ctx.user_name)
         decision = policy.check_airflow(ctx.scope, method_u, path, body, query)
         if not decision.allowed:
             return _deny(decision.reason)
+        change = (
+            {
+                "method": method_u,
+                "path": path,
+                "dag_id": path.split("/")[2] if path.startswith("/dags/") else None,
+                "body_sha256": _sha256_json(body),
+            }
+            if method_u != "GET"
+            else None
+        )
         if _airflow_api_disabled(ctx):
             return _to_json(
                 {
@@ -1119,9 +1166,15 @@ def build_tools(
                 tokens_strong=path.startswith("/dagSources/"),
             )
         except AirflowBackendError as err:
+            if change:
+                audit(ctx, "airflow_change", "failed", **change)
             return clean(_to_json(err.payload))
         except (ClientError, BotoCoreError, TypeError, ValueError, OSError) as err:
+            if change:
+                audit(ctx, "airflow_change", f"error:{type(err).__name__}", **change)
             return _client_error(err)
+        if change:
+            audit(ctx, "airflow_change", "ok", **change)
         return clean(_to_json(result))
 
     @tool
@@ -1175,7 +1228,18 @@ def build_tools(
                 return _deny(
                     f"{dag.file_name} already exists; set overwrite=true to replace it"
                 )
-            result = target.write(dag, expected)
+            change = {
+                "file_name": dag.file_name,
+                "target": target.describe(dag.file_name),
+                "sha256": dag.sha256_hex,
+                "replaces_existing": expected is not None,
+            }
+            try:
+                result = target.write(dag, expected)
+            except (dag_deploy.DagDeployError, ClientError, BotoCoreError, OSError) as err:
+                audit(ctx, "dag_deploy", f"error:{type(err).__name__}", **change)
+                raise
+            audit(ctx, "dag_deploy", "ok", **change)
         except dag_deploy.DagDeployError as err:
             return _deny(str(err))
         except (ClientError, BotoCoreError, OSError) as err:

@@ -75,11 +75,12 @@ class ApprovalHook(HookProvider):
             return
         path = str(args.get("path", ""))
         body = args.get("body") if isinstance(args.get("body"), dict) else None
+        ctx = self._get_context()
+        # The card shows the body the tool will send, note included (airflow_api adds the same note).
+        body = policy.with_audit_note(method, path, body, ctx.user_name)
 
         query = args.get("query") if isinstance(args.get("query"), dict) else None
-        decision = policy.check_airflow(
-            self._get_context().scope, method, path, body, query
-        )
+        decision = policy.check_airflow(ctx.scope, method, path, body, query)
         if not decision.allowed:
             # Do not ask for approval of something the policy will refuse anyway.
             event.cancel_tool = f"Blocked by agent policy: {decision.reason}"

@@ -329,7 +329,7 @@ def _validate_mutation(method: str, rest: str, body: dict | None) -> str | None:
         if body["state"] not in ("success", "failed"):
             return "run state must be 'success' or 'failed'"
     elif method == "PATCH" and "/taskInstances/" in rest:
-        error = _exact_keys(body, {"new_state"}, {"new_state"})
+        error = _exact_keys(body, {"new_state", "note"}, {"new_state"})
         if error:
             return error
         if body["new_state"] not in ("success", "failed"):
@@ -434,6 +434,45 @@ def check_airflow(
             error = _validate_mutation(method, rest, body)
             return Decision(not error, error or "", needs_approval=not error)
     return Decision(False, f"{method} {path} is not an action this agent can take")
+
+
+# Airflow keeps at most 1,000 characters in a DAG run or task instance note.
+MAX_NOTE_CHARS = 1000
+AUDIT_NOTE_PREFIX = "Via MWAA UI Agent, approved by "
+# The mutations whose request body has a note field (TriggerDAGRunPostBody, DAGRunPatchBody,
+# PatchTaskInstanceBody). Pausing a DAG and clearing tasks have none.
+_NOTED_MUTATIONS = (
+    ("POST", re.compile(r"^/dagRuns$")),
+    ("PATCH", re.compile(rf"^/dagRuns/{_SEGMENT}$")),
+    ("PATCH", re.compile(rf"^/dagRuns/{_SEGMENT}/taskInstances/{_SEGMENT}(?:/-?\d+)?$")),
+)
+
+
+def with_audit_note(method: str, path: str, body: Any, user_name: str) -> Any:
+    """The body to send, with a note naming the user who approved it, so the Airflow UI shows who it was for.
+
+    Airflow's own audit log names only the agent's role. The approval card shows this body, and the tool sends
+    the same body, so what the user approves is what runs. The user name comes from the request, so on a
+    runtime that a forged request can reach it is a label, not proof.
+    """
+    match = _DAG_PATH.match(path)
+    if not match or not isinstance(body, dict):
+        return body
+    rest = match.group("rest") or ""
+    if not any(
+        verb == method.upper() and pattern.fullmatch(rest)
+        for verb, pattern in _NOTED_MUTATIONS
+    ):
+        return body
+    tag = AUDIT_NOTE_PREFIX + user_name
+    note = body.get("note")
+    if isinstance(note, str) and note.strip():
+        if note.endswith(tag):
+            return body
+        note = note[: MAX_NOTE_CHARS - len(tag) - 2].rstrip() + "\n\n" + tag
+    else:
+        note = tag
+    return {**body, "note": note[:MAX_NOTE_CHARS]}
 
 
 def describe_mutation(method: str, path: str) -> str:

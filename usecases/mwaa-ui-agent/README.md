@@ -636,6 +636,8 @@ The CloudFormation template sets these variables:
 | `MODEL_REGION`      | `ModelRegion`, else stack Region     | Region for Bedrock calls                      |
 | `MWAA_AGENT_SKILLS` | `EnabledSkills` parameter            | Comma-separated enabled skills                |
 | `ENABLE_DAG_DEPLOY` | `EnableDagAuthoring` parameter       | `true` enables the `deploy_dag` tool          |
+| `ENABLE_AIRFLOW_OPERATIONS` | `EnableAirflowOperations` parameter | `true` lets the `operate` tier through; otherwise every request is read-only |
+| `ENABLE_DOWNSTREAM_JOB_INSPECTION` | `EnableDownstreamJobInspection` parameter | `true` enables the downstream job status calls |
 | `LOG_LEVEL`         | `INFO`                               | Runtime log level                             |
 
 Optional runtime variables supported by the code:
@@ -1011,6 +1013,15 @@ When Airflow's `core.multi_team` option is on, the agent behaves as follows:
   builds reject symlinks.
 - Agent artifact deployment requires bucket versioning, expected-owner
   validation, checksum validation, and an exact S3 object version.
+- Every change the agent makes is logged by the runtime as one JSON line on the
+  `mwaa_agent.audit` logger, in the runtime's CloudWatch log group: the user ID
+  and name, the DAG, method and path, the SHA-256 of the request body (or of
+  the DAG file), and the outcome. Airflow's own audit log names only the
+  agent's Airflow role. Triggered runs and run or task state changes also get
+  the note `Via MWAA UI Agent, approved by <user>`, which the Airflow UI shows,
+  and which the approval card shows before the user approves. The user name
+  comes from the request, so while the execution role can invoke the runtime
+  it is attribution, not proof.
 
 ### Shared execution-role trust boundary
 

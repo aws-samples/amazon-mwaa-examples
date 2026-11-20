@@ -410,7 +410,107 @@ def test_approval_card_shows_exactly_what_runs():
     assert (
         redact_values(event.asked) == event.asked
     )  # translate() leaves the card unchanged
-    assert event.asked["body"] == use["input"]["body"]
+    # The card shows the body plus the audit note, which airflow_api adds the same way before sending.
+    assert event.asked["body"] == {
+        **use["input"]["body"],
+        "note": "rerun\n\nVia MWAA UI Agent, approved by alice",
+    }
+
+
+@pytest.mark.parametrize(
+    "method,path,body,expected_note",
+    [
+        ("POST", "/dags/etl/dagRuns", {}, "Via MWAA UI Agent, approved by alice"),
+        (
+            "PATCH",
+            "/dags/etl/dagRuns/r1",
+            {"state": "failed", "note": "bad data"},
+            "bad data\n\nVia MWAA UI Agent, approved by alice",
+        ),
+        (
+            "PATCH",
+            "/dags/etl/dagRuns/r1/taskInstances/t",
+            {"new_state": "success"},
+            "Via MWAA UI Agent, approved by alice",
+        ),
+        ("PATCH", "/dags/etl", {"is_paused": True}, None),  # no note field in Airflow
+        (
+            "POST",
+            "/dags/etl/clearTaskInstances",
+            {"dag_run_id": "r1", "task_ids": ["t"], "dry_run": False},
+            None,
+        ),
+    ],
+)
+def test_airflow_change_sends_the_card_body_and_logs_an_audit_line(
+    monkeypatch, tmp_path, caplog, method, path, body, expected_note
+):
+    import logging
+
+    from mwaa_agent import tools as t
+
+    ctx = parse_request(
+        payload(context={"can_edit_task_instances": True, "can_edit_runs": True})
+    ).context
+    event = FakeEvent(
+        {
+            "name": "airflow_api",
+            "toolUseId": "1",
+            "input": {"method": method, "path": path, "body": dict(body)},
+        },
+        answer={"approved": True},
+    )
+    ApprovalHook(lambda: ctx)._gate(event)
+    assert event.cancel_tool is False
+    sent = []
+    monkeypatch.setattr(
+        t,
+        "make_backend",
+        lambda *a: SimpleNamespace(call=lambda m, p, q, b: sent.append(b) or {}),
+    )
+    api = {x.tool_name: x for x in build_tools(lambda: ctx, tmp_path)}["airflow_api"]
+    with caplog.at_level(logging.INFO, logger="mwaa_agent.audit"):
+        api(method, path, None, dict(body))
+    assert sent == [event.asked["body"]]  # exactly what the user approved
+    assert sent[0].get("note") == expected_note
+    (record,) = [r for r in caplog.records if r.name == "mwaa_agent.audit"]
+    line = json.loads(record.getMessage())
+    assert line == {
+        "audit": "airflow_change",
+        "environment": "env1",
+        "user_id": "1",
+        "user_name": "alice",
+        "method": method,
+        "path": path,
+        "dag_id": "etl",
+        "body_sha256": t._sha256_json(sent[0]),
+        "outcome": "ok",
+    }
+
+
+def test_airflow_reads_are_not_audited(monkeypatch, tmp_path, caplog):
+    import logging
+
+    from mwaa_agent import tools as t
+
+    ctx = parse_request(payload()).context
+    monkeypatch.setattr(
+        t, "make_backend", lambda *a: SimpleNamespace(call=lambda *a: {})
+    )
+    api = {x.tool_name: x for x in build_tools(lambda: ctx, tmp_path)}["airflow_api"]
+    with caplog.at_level(logging.INFO, logger="mwaa_agent.audit"):
+        api("GET", "/dags/etl")
+    assert not [r for r in caplog.records if r.name == "mwaa_agent.audit"]
+
+
+def test_audit_note_fits_airflow_note_limit_and_is_not_repeated():
+    from mwaa_agent.policy import MAX_NOTE_CHARS, with_audit_note
+
+    long = with_audit_note("POST", "/dags/etl/dagRuns", {"note": "x" * 5000}, "alice")
+    assert len(long["note"]) <= MAX_NOTE_CHARS
+    assert long["note"].endswith("Via MWAA UI Agent, approved by alice")
+    once = with_audit_note("POST", "/dags/etl/dagRuns", {}, "alice")
+    assert with_audit_note("POST", "/dags/etl/dagRuns", once, "alice") == once
 
 
 def test_approval_hook_ignores_reads():
@@ -1141,7 +1241,12 @@ def test_context_grants_deploy_only_with_operate_tier():
     assert ctx.scope.can_deploy_dags is False
 
 
-def test_deploy_approval_shows_exact_file_and_writes_only_after_approval(authoring):
+def test_deploy_approval_shows_exact_file_and_writes_only_after_approval(
+    authoring, caplog
+):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="mwaa_agent.audit")
     event = FakeEvent(_deploy_use(), answer={"approved": True})
     authoring.hook._gate(event)
     assert event.cancel_tool is False
@@ -1158,6 +1263,11 @@ def test_deploy_approval_shows_exact_file_and_writes_only_after_approval(authori
     assert [p.name for p in authoring.dir.iterdir()] == [
         "hello.py"
     ]  # no temp files left
+    (record,) = [r for r in caplog.records if r.name == "mwaa_agent.audit"]
+    line = json.loads(record.getMessage())
+    assert line["audit"] == "dag_deploy" and line["outcome"] == "ok"
+    assert line["user_name"] == "alice" and line["sha256"] == event.asked["sha256"]
+    assert line["file_name"] == "hello.py" and line["replaces_existing"] is False
 
 
 def test_deploy_declined_is_cancelled(authoring):
@@ -1647,7 +1757,9 @@ async def test_real_strands_interrupt_runs_the_approved_input_once(
     cards = [
         a for e in first if e["type"] == "approval_required" for a in e["approvals"]
     ]
-    assert len(cards) == 1 and cards[0]["body"] == {"note": "x"}
+    assert len(cards) == 1 and cards[0]["body"] == {
+        "note": "x\n\nVia MWAA UI Agent, approved by alice"
+    }
     assert calls == []  # nothing runs before the decision
 
     resume = [
