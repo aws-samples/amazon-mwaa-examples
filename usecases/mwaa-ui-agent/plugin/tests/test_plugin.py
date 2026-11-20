@@ -1104,3 +1104,13 @@ def test_raw_lines_reads_in_blocks_not_bytes():
     raw = Raw(body)
     lines = list(_raw_lines(raw))
     assert b"".join(lines) == body and raw.calls < 20
+
+
+def test_agent_context_sends_the_environments_sensitive_names(monkeypatch):
+    monkeypatch.setenv(
+        "AIRFLOW__CORE__SENSITIVE_VAR_CONN_NAMES", "billing_ref, conn_str,bad name,,"
+    )
+    ctx = app_mod.agent_context(make_access(), load_settings(), app_mod.PageContext())
+    assert ctx["sensitive_names"] == ["billing_ref", "conn_str"]
+    monkeypatch.delenv("AIRFLOW__CORE__SENSITIVE_VAR_CONN_NAMES")
+    assert app_mod.sensitive_names() == []

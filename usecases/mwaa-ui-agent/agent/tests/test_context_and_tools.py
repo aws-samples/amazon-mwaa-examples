@@ -2377,3 +2377,71 @@ def test_redaction_is_linear_on_many_assignments():
     out = redact(text)
     assert time.monotonic() - started < 1.0
     assert "abc" not in out
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "connection_string",
+        "conn_str",
+        "connStr",
+        "DB-CONN-STR",
+        "creds",
+        "dsn",
+        "webhook_url",
+        "auth_header",
+        "service_key",
+        "proxy_password",
+        "keyfile_dict",
+        "passphrase",
+    ],
+)
+def test_airflow_sensitive_field_names_are_redacted(name):
+    from mwaa_agent.sanitize import is_sensitive_name
+
+    assert is_sensitive_name(name)
+    assert scrub({name: "postgres-host-and-pw"}) == {name: "[REDACTED]"}
+    env = scrub({"environment": [{"name": name.upper(), "value": "v"}]})
+    assert env["environment"][0]["value"] == "[REDACTED]"
+
+
+@pytest.mark.parametrize(
+    "name", ["dag_id", "max_active_runs", "description", "owner", "schedule"]
+)
+def test_ordinary_field_names_are_kept(name):
+    from mwaa_agent.sanitize import is_sensitive_name
+
+    assert not is_sensitive_name(name)
+    assert scrub({name: "v"}) == {name: "v"}
+
+
+def test_environment_sensitive_names_from_the_plugin_are_redacted(
+    monkeypatch, tmp_path
+):
+    from mwaa_agent import tools as t
+
+    monkeypatch.setattr(
+        t,
+        "make_backend",
+        lambda *a: SimpleNamespace(
+            call=lambda *a: {"conf": {"billing_ref": "acct-123", "rows": 5}}
+        ),
+    )
+    plain = parse_request(payload()).context
+    api = {x.tool_name: x for x in build_tools(lambda: plain, tmp_path)}["airflow_api"]
+    assert json.loads(api("GET", "/dags/etl"))["conf"]["billing_ref"] == "acct-123"
+
+    noted = parse_request(payload(context={"sensitive_names": ["Billing_Ref"]})).context
+    api = {x.tool_name: x for x in build_tools(lambda: noted, tmp_path)}["airflow_api"]
+    assert json.loads(api("GET", "/dags/etl"))["conf"] == {
+        "billing_ref": "[REDACTED]",
+        "rows": 5,
+    }
+
+
+@pytest.mark.parametrize(
+    "names", [["ok", "bad name"], "billing_ref", [1], ["x"] * 51, ["a" * 65]]
+)
+def test_invalid_sensitive_names_are_rejected(names):
+    with pytest.raises(RequestError, match="sensitive_names"):
+        parse_request(payload(context={"sensitive_names": names}))

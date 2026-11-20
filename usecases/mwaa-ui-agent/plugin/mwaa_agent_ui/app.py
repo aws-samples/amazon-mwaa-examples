@@ -165,6 +165,21 @@ def _bounded_dag_list(
     return kept, False
 
 
+_SENSITIVE_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+
+
+def sensitive_names() -> list[str]:
+    """The environment's extra sensitive names (core.sensitive_var_conn_names), for the agent's redaction."""
+    from airflow.configuration import conf
+
+    try:
+        raw = conf.get("core", "sensitive_var_conn_names", fallback="") or ""
+    except Exception:  # noqa: BLE001 - an unreadable option adds nothing; Airflow's defaults still apply
+        return []
+    names = {n.strip() for n in raw.split(",")}
+    return sorted(n for n in names if _SENSITIVE_NAME.fullmatch(n))[:50]
+
+
 def agent_context(access: UserAccess, settings: Settings, page: PageContext) -> dict:
     # Only pass hierarchical page context for a DAG the user can see.
     if not page.dag_id or not access.can_read(page.dag_id):
@@ -197,6 +212,7 @@ def agent_context(access: UserAccess, settings: Settings, page: PageContext) -> 
         "teams": sorted(access.teams)[:20],
         "page": page.model_dump(),
         "dag_deploy_mode": settings.dag_deploy_mode,
+        "sensitive_names": sensitive_names(),
     }
 
 

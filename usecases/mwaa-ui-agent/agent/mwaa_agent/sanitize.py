@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import re
+from contextvars import ContextVar
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -79,6 +80,70 @@ _SENSITIVE_KEY = re.compile(
 _SENSITIVE_NAME = re.compile(
     r"(?i)(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key)"
 )
+# Airflow's own list of sensitive field names (DEFAULT_SENSITIVE_FIELDS in Airflow 3.3.1's secrets masker), which
+# it uses to hide Variable values and connection extras, plus names it misses. Matched like Airflow does: as a
+# substring of the lower-cased name, and also with separators removed, so connStr and conn-str match conn_str.
+AIRFLOW_SENSITIVE_FIELDS = frozenset(
+    {
+        "access_key",
+        "access_token",
+        "api_key",
+        "apikey",
+        "auth_header",
+        "authorization",
+        "bearer",
+        "connection_string",
+        "dsn",
+        "passphrase",
+        "passwd",
+        "password",
+        "private_key",
+        "proxy",
+        "proxy_password",
+        "proxies",
+        "secret",
+        "service_account",
+        "service_key",
+        "token",
+        "keyfile_dict",
+        "webhook_url",
+    }
+)
+EXTRA_SENSITIVE_FIELDS = frozenset(
+    {"conn_str", "connstr", "conn_uri", "connection_uri", "creds", "credential"}
+)
+# The environment's own additions (core.sensitive_var_conn_names), sent by the plugin for each request. They can
+# only add names, so a forged list can only redact more.
+_request_sensitive_fields: ContextVar[frozenset[str]] = ContextVar(
+    "_request_sensitive_fields", default=frozenset()
+)
+
+
+def use_sensitive_fields(fields: frozenset[str]) -> None:
+    """Add the environment's configured sensitive names for the rest of this request."""
+    _request_sensitive_fields.set(frozenset(fields))
+
+
+def _normalized(name: str) -> tuple[str, str]:
+    lower = name.strip().lower()
+    return re.sub(r"\W+", "_", lower), re.sub(r"[\W_]+", "", lower)
+
+
+def is_sensitive_name(name: str) -> bool:
+    """True if a key or variable name names a credential, by the agent's patterns or Airflow's list."""
+    if _SENSITIVE_KEY.search(name):
+        return True
+    with_underscores, bare = _normalized(name)
+    fields = (
+        AIRFLOW_SENSITIVE_FIELDS
+        | EXTRA_SENSITIVE_FIELDS
+        | _request_sensitive_fields.get()
+    )
+    return any(
+        field in with_underscores or field.replace("_", "") in bare for field in fields
+    )
+
+
 # Pagination cursors in AWS responses. Their names contain "token", but aws_api must return them so the
 # model can page through results (FilterLogEvents often returns an empty page with a nextToken).
 _PAGINATION_KEYS = frozenset(
@@ -193,7 +258,7 @@ def _redact_url(value: str) -> str:
         parts = urlsplit(value)
         pairs = parse_qsl(parts.query, keep_blank_values=True)
         if any(
-            _SENSITIVE_KEY.search(key) or key.lower().startswith("x-amz-")
+            is_sensitive_name(key) or key.lower().startswith("x-amz-")
             for key, _ in pairs
         ):
             query = urlencode([(key, "[REDACTED]") for key, _ in pairs])
@@ -233,12 +298,14 @@ def scrub(value: Any, parent_key: str = "") -> Any:
     if parent_key in _PAGINATION_KEYS:
         # Opaque paging cursors, not credentials; the model needs them to read the next page.
         return redact(value) if isinstance(value, str) else value
-    if _SENSITIVE_KEY.search(parent_key):
+    if parent_key and is_sensitive_name(parent_key):
         return "[REDACTED]"
     if isinstance(value, dict):
         # AWS APIs often represent environment variables as {name: X, value: Y}.
         name = value.get("name", value.get("Name"))
-        if isinstance(name, str) and _SENSITIVE_NAME.search(name):
+        if isinstance(name, str) and (
+            _SENSITIVE_NAME.search(name) or is_sensitive_name(name)
+        ):
             return {
                 k: (
                     "[REDACTED]"

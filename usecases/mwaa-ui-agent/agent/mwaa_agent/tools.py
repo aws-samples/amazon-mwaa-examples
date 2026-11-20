@@ -23,7 +23,7 @@ from strands import tool
 from . import dag_deploy, dag_files, dag_lint, policy
 from .airflow_backend import AirflowBackendError, make_backend
 from .context import SessionContext
-from .sanitize import clean, redact, scrub
+from .sanitize import clean, redact, scrub, use_sensitive_fields
 
 MAX_S3_OBJECT_BYTES = 256 * 1024
 MAX_SKILL_FILE_BYTES = 256 * 1024
@@ -995,6 +995,14 @@ def build_tools(
 ) -> list:
     """Build the tools. Pass the same ``deploy_approvals`` to ApprovalHook, so uploads bind to approvals."""
     deploy_approvals = deploy_approvals or dag_deploy.DEFAULT_APPROVALS
+    request_context = get_context
+
+    def get_context() -> SessionContext:
+        # Every tool reads the context first, so the environment's sensitive names apply to all its output.
+        ctx = request_context()
+        use_sensitive_fields(ctx.sensitive_names)
+        return ctx
+
     allowed_query_ids: set[str] = set()
     observed_resource_values = Provenance()
     observed_lock = threading.Lock()

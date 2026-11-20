@@ -1085,8 +1085,14 @@ Review `infra/agent-runtime.yaml` against your environment before deployment:
 
 Authorized DAG code, rendered fields, task logs, and AWS API results can be sent
 to the selected Bedrock model. Credential-shaped fields are removed before model
-use, but pattern-based redaction cannot guarantee removal of every form of
-sensitive business data or personally identifiable information.
+use. Field names are matched against the agent's own patterns, Airflow's list of
+sensitive field names (`DEFAULT_SENSITIVE_FIELDS` in Airflow 3.3.1's secrets
+masker, such as `connection_string`, `dsn` and `webhook_url`) plus a few it
+misses (`conn_str`, `creds`), and the environment's
+`core.sensitive_var_conn_names`, which the plugin sends with each request. Like
+Airflow, a name matches if it contains one of these. Pattern-based redaction
+still cannot guarantee removal of every form of sensitive business data or
+personally identifiable information.
 
 Before use, decide:
 

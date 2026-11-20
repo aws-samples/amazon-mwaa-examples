@@ -72,6 +72,8 @@ class SessionContext:
     dag_deploy_mode: str = "s3_with_approval"
     # False when the runtime has Airflow operations turned off, so operate users are served read-only.
     operations_enabled: bool = True
+    # The environment's core.sensitive_var_conn_names: more key names to redact. Only ever adds redaction.
+    sensitive_names: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -112,6 +114,22 @@ def _team_set(values) -> frozenset[str]:
     if not all(isinstance(v, str) and TEAM_NAME.match(v) for v in values):
         raise RequestError("'teams' contains an invalid team name")
     return frozenset(values)
+
+
+SENSITIVE_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+MAX_SENSITIVE_NAMES = 50
+
+
+def _sensitive_names(values) -> frozenset[str]:
+    if values is None:
+        return frozenset()
+    if not isinstance(values, list) or len(values) > MAX_SENSITIVE_NAMES:
+        raise RequestError(
+            f"'sensitive_names' must be a list of at most {MAX_SENSITIVE_NAMES} names"
+        )
+    if not all(isinstance(v, str) and SENSITIVE_NAME.match(v) for v in values):
+        raise RequestError("'sensitive_names' contains an invalid name")
+    return frozenset(v.lower() for v in values)
 
 
 def _dag_set(values, name: str) -> frozenset[str]:
@@ -188,6 +206,7 @@ def parse_request(payload: dict) -> AgentRequest:
             ctx.get("dag_deploy_mode") or "s3_with_approval", "dag_deploy_mode", 32
         ),
         operations_enabled=operations_enabled,
+        sensitive_names=_sensitive_names(ctx.get("sensitive_names")),
     )
 
     kind = payload.get("type")
