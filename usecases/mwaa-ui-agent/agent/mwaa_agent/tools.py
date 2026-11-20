@@ -1244,7 +1244,12 @@ def build_tools(
             }
             try:
                 result = target.write(dag, expected)
-            except (dag_deploy.DagDeployError, ClientError, BotoCoreError, OSError) as err:
+            except (
+                dag_deploy.DagDeployError,
+                ClientError,
+                BotoCoreError,
+                OSError,
+            ) as err:
                 audit(ctx, "dag_deploy", f"error:{type(err).__name__}", **change)
                 raise
             audit(ctx, "dag_deploy", "ok", **change)

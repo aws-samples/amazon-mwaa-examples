@@ -809,17 +809,19 @@ def test_users_who_read_all_dags_read_the_dag_folder_and_task_logs(mwaa_resource
     ctx = parse_request(payload(context={"all_dags_readable": True})).context
     t = mwaa_resources
     assert (
-        _check(t, ctx, "s3", "GetObject", {"Bucket": "env-bucket", "Key": "dags/etl.py"})
+        _check(
+            t, ctx, "s3", "GetObject", {"Bucket": "env-bucket", "Key": "dags/etl.py"}
+        )
         is None
     )
     assert (
-        _check(t, ctx, "s3", "ListObjectsV2", {"Bucket": "env-bucket", "Prefix": "dags/"})
+        _check(
+            t, ctx, "s3", "ListObjectsV2", {"Bucket": "env-bucket", "Prefix": "dags/"}
+        )
         is None
     )
     assert _check(t, ctx, "s3", "GetBucketVersioning", {"Bucket": "env-bucket"}) is None
-    assert (
-        _check(t, ctx, "logs", "FilterLogEvents", {"logGroupName": TASK}) is None
-    )
+    assert _check(t, ctx, "logs", "FilterLogEvents", {"logGroupName": TASK}) is None
     query = {
         "logGroupName": TASK,
         "queryString": "fields @message",

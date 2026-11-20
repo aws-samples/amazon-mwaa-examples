@@ -90,7 +90,6 @@ DOWNSTREAM_AWS_OPERATIONS = frozenset(
         ("sagemaker", "DescribeProcessingJob"),
     }
 )
-assert DOWNSTREAM_AWS_OPERATIONS <= ALLOWED_AWS_OPERATIONS
 
 
 @dataclass(frozen=True)
@@ -444,7 +443,10 @@ AUDIT_NOTE_PREFIX = "Via MWAA UI Agent, approved by "
 _NOTED_MUTATIONS = (
     ("POST", re.compile(r"^/dagRuns$")),
     ("PATCH", re.compile(rf"^/dagRuns/{_SEGMENT}$")),
-    ("PATCH", re.compile(rf"^/dagRuns/{_SEGMENT}/taskInstances/{_SEGMENT}(?:/-?\d+)?$")),
+    (
+        "PATCH",
+        re.compile(rf"^/dagRuns/{_SEGMENT}/taskInstances/{_SEGMENT}(?:/-?\d+)?$"),
+    ),
 )
 
 

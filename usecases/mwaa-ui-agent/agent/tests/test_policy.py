@@ -279,3 +279,9 @@ def test_truncated_dag_lists_explain_the_denial():
 def test_routes_the_mwaa_user_role_cannot_read_are_not_offered(path):
     # On MWAA the agent calls Airflow as the User role, which has no Plugins or Providers permission.
     assert not policy.check_airflow(ADMIN, "GET", path).allowed
+
+
+def test_downstream_operations_are_a_subset_of_the_allowlist():
+    from mwaa_agent.policy import ALLOWED_AWS_OPERATIONS, DOWNSTREAM_AWS_OPERATIONS
+
+    assert DOWNSTREAM_AWS_OPERATIONS <= ALLOWED_AWS_OPERATIONS

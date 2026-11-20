@@ -88,13 +88,21 @@ def _dag_teams() -> dict[str, str | None]:
         if not _multi_team_enabled():
             return dict.fromkeys(session.scalars(select(DagModel.dag_id)))
         from airflow.models.dagbundle import DagBundleModel
-        from airflow.models.team import dag_bundle_team_association_table as bundle_teams
+        from airflow.models.team import (
+            dag_bundle_team_association_table as bundle_teams,
+        )
 
-        if "team_name" not in bundle_teams.c:  # before Airflow 3.3, which has no team names
+        if (
+            "team_name" not in bundle_teams.c
+        ):  # before Airflow 3.3, which has no team names
             return dict.fromkeys(session.scalars(select(DagModel.dag_id)))
         rows = session.execute(
             select(DagModel.dag_id, bundle_teams.c.team_name)
-            .join(DagBundleModel, DagModel.bundle_name == DagBundleModel.name, isouter=True)
+            .join(
+                DagBundleModel,
+                DagModel.bundle_name == DagBundleModel.name,
+                isouter=True,
+            )
             .join(
                 bundle_teams,
                 DagBundleModel.name == bundle_teams.c.dag_bundle_name,
@@ -212,7 +220,9 @@ def resolve_access(user: BaseUser) -> UserAccess:
         == runnable
     )
     can_edit_runs = bool(runnable) and (
-        _authorized_dags(auth_manager, user, runnable, teams, "PUT", DagAccessEntity.RUN)
+        _authorized_dags(
+            auth_manager, user, runnable, teams, "PUT", DagAccessEntity.RUN
+        )
         == runnable
     )
     return UserAccess(

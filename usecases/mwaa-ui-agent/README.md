@@ -771,8 +771,8 @@ Run all commands from `usecases/mwaa-ui-agent/`.
 The current expected totals are:
 
 ```text
-320 passed  # agent
-58 passed   # plugin
+384 passed  # agent
+72 passed   # plugin
 ```
 
 The suites cover tool allowlists, DAG scope, mutation schemas, approvals and

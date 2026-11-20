@@ -340,7 +340,9 @@ def test_dag_deploy_needs_operate_and_connection_rights(
     monkeypatch.setattr(
         access_mod,
         "get_auth_manager",
-        lambda: FakeAuthManager({"a", "b"}, {"a", "b"}, can_create, True, can_edit_connections),
+        lambda: FakeAuthManager(
+            {"a", "b"}, {"a", "b"}, can_create, True, can_edit_connections
+        ),
     )
     user = SimpleNamespace(get_id=lambda: 7, get_name=lambda: "bob")
     assert access_mod.resolve_access(user).can_deploy_dags is expected
@@ -917,7 +919,9 @@ def test_all_dags_readable_needs_every_dag_and_the_global_grant(monkeypatch):
     monkeypatch.setattr(access_mod, "get_auth_manager", lambda: manager)
     assert access_mod.resolve_access(user).all_dags_readable is True
     # A DAG the user cannot read exists: not all DAGs.
-    monkeypatch.setattr(access_mod, "_dag_teams", lambda: dict.fromkeys(["a", "b", "c"]))
+    monkeypatch.setattr(
+        access_mod, "_dag_teams", lambda: dict.fromkeys(["a", "b", "c"])
+    )
     assert access_mod.resolve_access(user).all_dags_readable is False
 
     # The DAG list cannot be read: fail closed.
@@ -953,7 +957,9 @@ def test_edit_rights_must_hold_on_every_runnable_dag(monkeypatch):
     user = SimpleNamespace(get_id=lambda: 7, get_name=lambda: "bob")
     access = access_mod.resolve_access(user)
     assert access.runnable_dags == {"a", "b"}
-    assert access.can_edit_runs is False  # one flag for all runnable DAGs, so it needs all of them
+    assert (
+        access.can_edit_runs is False
+    )  # one flag for all runnable DAGs, so it needs all of them
     assert access.can_edit_task_instances is True
 
 
@@ -973,7 +979,9 @@ def test_per_dag_checks_batch_and_split_only_on_refusal(monkeypatch):
     assert manager.batches <= 2 * 8 + 1  # about 2 log2(256), not 256 calls
     manager.batches = 0
     manager.per_dag.clear()
-    access_mod._authorized_dags(manager, user, frozenset(dags), {}, "POST", DagAccessEntity.RUN)
+    access_mod._authorized_dags(
+        manager, user, frozenset(dags), {}, "POST", DagAccessEntity.RUN
+    )
     assert manager.batches == 1
 
     class Failing(FakeAuthManager):
@@ -982,7 +990,12 @@ def test_per_dag_checks_batch_and_split_only_on_refusal(monkeypatch):
 
     assert (
         access_mod._authorized_dags(
-            Failing(dags, dags, True), user, frozenset(dags), {}, "POST", DagAccessEntity.RUN
+            Failing(dags, dags, True),
+            user,
+            frozenset(dags),
+            {},
+            "POST",
+            DagAccessEntity.RUN,
         )
         == frozenset()
     )
