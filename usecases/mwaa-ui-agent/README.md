@@ -322,7 +322,6 @@ Optional deployment variables:
 | `MODEL_ID`                    | `global.anthropic.claude-sonnet-5-5` | Bedrock model or inference profile                                    |
 | `MODEL_REGION`                | Stack Region                         | Region for Bedrock calls; the model must be `ACTIVE` there            |
 | `ENABLED_SKILLS`              | Debugging and testing                | Comma-separated skills to load; see the note below                    |
-| `ADDITIONAL_READ_BUCKET_ARNS` | Empty                                | Additional script buckets; see the security warning below             |
 | `ATTACH_TO_EXECUTION_ROLE`    | `false`                              | If `true`, adds the runtime invoke policy to the MWAA execution role  |
 | `ENABLE_DAG_AUTHORING`        | `false`                              | If `true`, enables [DAG authoring](#dag-authoring); dev and test only |
 
@@ -1030,9 +1029,6 @@ Review `infra/agent-runtime.yaml` against your environment before deployment:
   production design.
 - The environment log-group wildcard can overlap a second environment whose name
   begins with the first environment name plus `-`. Prefer exact log-group ARNs.
-- `AdditionalReadOnlyBucketArns` accepts deployment input. Never provide
-  wildcard bucket ARNs. The current runtime code reads only the MWAA source
-  bucket until explicit support for additional buckets is added.
 - The model policy allows broad foundation-model ARNs so an inference profile
   can resolve. Narrow it to the configured profile and required underlying model
   ARNs after confirming the profile's Regions.

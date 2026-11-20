@@ -11,7 +11,6 @@
 #   AWS_REGION          defaults to the environment's Region from your AWS config
 #   STACK_NAME          defaults to mwaa-ui-agent-<env>
 #   ATTACH_TO_EXECUTION_ROLE=true   add the invoke permission to the environment's execution role
-#   ADDITIONAL_READ_BUCKET_ARNS     comma-separated bucket ARNs the agent may read (Glue/EMR scripts)
 #   TEAM_DAG_FOLDERS=auto           multi-team (Airflow 3.3.1+) with ENABLE_DAG_AUTHORING: also allow writes
 #                                   to every team's DAG folder from get-environment Teams
 #   MODEL_ID            Bedrock model or inference profile ID
@@ -75,7 +74,6 @@ params=(
   "ArtifactVersionId=${VERSION_ID}"
 )
 [[ "${ATTACH_TO_EXECUTION_ROLE:-false}" == "true" ]] && params+=("MwaaExecutionRoleName=${EXEC_ROLE_NAME}")
-[[ -n "${ADDITIONAL_READ_BUCKET_ARNS:-}" ]] && params+=("AdditionalReadOnlyBucketArns=${ADDITIONAL_READ_BUCKET_ARNS}")
 [[ -n "${MODEL_ID:-}" ]] && params+=("ModelId=${MODEL_ID}")
 [[ -n "${MODEL_REGION:-}" ]] && params+=("ModelRegion=${MODEL_REGION}")
 if [[ "${ENABLE_DAG_AUTHORING:-false}" == "true" ]]; then

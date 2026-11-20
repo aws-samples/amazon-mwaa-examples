@@ -17,12 +17,6 @@ Parameters:
   MwaaSourceBucketName:
     Type: String
     Description: The environment's S3 bucket (DAGs, plugins, requirements). The agent gets read-only access.
-  AdditionalReadOnlyBucketArns:
-    Type: CommaDelimitedList
-    Default: ""
-    Description: >-
-      Optional bucket ARNs the agent may read, for example where AWS Glue or Amazon EMR scripts live
-      (arn:aws:s3:::my-scripts). Leave empty for none.
   MwaaExecutionRoleName:
     Type: String
     Default: ""
@@ -89,7 +83,6 @@ Conditions:
   GlobalDagAuthoring: !And [!Condition DagAuthoring, !Not [!Condition HasTeamDagFolders]]
   AttachInvokePolicy: !Not [!Equals [!Ref MwaaExecutionRoleName, ""]]
   HasModelRegion: !Not [!Equals [!Ref ModelRegion, ""]]
-  HasAdditionalBuckets: !Not [!Equals [!Join ["", !Ref AdditionalReadOnlyBucketArns], ""]]
   HasArtifactVersion: !Not [!Equals [!Ref ArtifactVersionId, ""]]
 
 Resources:
@@ -247,19 +240,6 @@ Resources:
                   - ec2:DescribeNetworkAcls
                   - sts:GetCallerIdentity
                 Resource: "*"
-              - !If
-                - HasAdditionalBuckets
-                - Sid: AdditionalBucketRead
-                  Effect: Allow
-                  Action: [s3:ListBucket, s3:GetObject]
-                  Resource: !Split
-                    - ","
-                    - !Join
-                      - ","
-                      - - !Join [",", !Ref AdditionalReadOnlyBucketArns]
-                        - !Join ["", [!Join ["/*,", !Ref AdditionalReadOnlyBucketArns], "/*"]]
-                    # [a, b] -> [a, b, a/*, b/*]
-                - !Ref AWS::NoValue
               - !If
                 - GlobalDagAuthoring
                 - Sid: DagFolderWrite # deploy_dag only; no delete, and nothing outside the DAG folder
