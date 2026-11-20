@@ -40,7 +40,7 @@ env_json="$(aws mwaa get-environment --name "$MWAA_ENV_NAME" --output json)"
 SOURCE_BUCKET="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Environment"]["SourceBucketArn"].split(":::")[1])' <<<"$env_json")"
 EXEC_ROLE_ARN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Environment"]["ExecutionRoleArn"])' <<<"$env_json")"
 EXEC_ROLE_NAME="${EXEC_ROLE_ARN##*/}"
-DAG_S3_PATH="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Environment"].get("DagS3Path") or "dags")' <<<"$env_json")"
+DAG_S3_PATH="$(python3 -c 'import json,sys; print((json.load(sys.stdin)["Environment"].get("DagS3Path") or "dags").strip("/"))' <<<"$env_json")"
 AIRFLOW_VERSION="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Environment"]["AirflowVersion"])' <<<"$env_json")"
 
 python3 - "$AIRFLOW_VERSION" <<'EOF'
@@ -79,6 +79,7 @@ params=(
   "ArtifactBucket=${ARTIFACT_BUCKET}"
   "ArtifactKey=${KEY}"
   "ArtifactVersionId=${VERSION_ID}"
+  "MwaaDagS3Path=${DAG_S3_PATH%/}"
 )
 [[ "${ATTACH_TO_EXECUTION_ROLE:-false}" == "true" ]] && params+=("MwaaExecutionRoleName=${EXEC_ROLE_NAME}")
 if [[ "${ENABLE_AIRFLOW_OPERATIONS:-false}" == "true" ]]; then
@@ -89,7 +90,7 @@ fi
 [[ -n "${MODEL_ID:-}" ]] && params+=("ModelId=${MODEL_ID}")
 [[ -n "${MODEL_REGION:-}" ]] && params+=("ModelRegion=${MODEL_REGION}")
 if [[ "${ENABLE_DAG_AUTHORING:-false}" == "true" ]]; then
-  params+=("EnableDagAuthoring=true" "MwaaDagS3Path=${DAG_S3_PATH%/}")
+  params+=("EnableDagAuthoring=true")
   if [[ "${TEAM_DAG_FOLDERS:-}" == "auto" ]]; then
     TEAM_ARNS="$(python3 -c '
 import json, sys

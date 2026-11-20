@@ -1044,8 +1044,11 @@ Review `infra/agent-runtime.yaml` against your environment before deployment:
 - If `MwaaExecutionRoleName` is not supplied, IAM inspection falls back to all
   roles in the account. Pass and scope the exact execution-role ARN in a
   production design.
-- The environment log-group wildcard can overlap a second environment whose name
-  begins with the first environment name plus `-`. Prefer exact log-group ARNs.
+- The agent role reads only the environment's DAG folder
+  (`<source-bucket>/<DagS3Path>/*`) and its `airflow-<env>-Task` log group. It
+  cannot read `requirements.txt`, `plugins.zip`, the startup script, or the
+  scheduler, DAG processor, webserver and worker logs, which Airflow shows to no
+  role. The agent says what to check there and asks for an administrator.
 - The model policy allows broad foundation-model ARNs so an inference profile
   can resolve. Narrow it to the configured profile and required underlying model
   ARNs after confirming the profile's Regions.
@@ -1181,9 +1184,11 @@ This normally means one of these controls worked:
 - the Region differs from the environment Region;
 - an S3 bucket, log group, MWAA environment, or IAM role is outside the pinned
   environment;
-- the user cannot read every DAG: such users cannot read S3 or run Logs
-  Insights queries, and can read only Task log streams of their own DAGs
-  (`dag_id=<dag_id>/...`), because the bucket and the other log groups hold
+- the read is outside the DAG folder or the Task log group, which are all the
+  agent reads, even for users who can read every DAG;
+- the user cannot read every DAG: such users cannot read the DAG folder or run
+  Logs Insights queries, and can read only Task log streams of their own DAGs
+  (`dag_id=<dag_id>/...`), because the DAG folder and the Task log group hold
   data from all DAGs;
 - a downstream job ID has not appeared in authorized Airflow context; or
 - the agent is in local mode, where generic AWS diagnostic calls are disabled.

@@ -705,22 +705,20 @@ def test_aws_reads_inside_dag_scope_are_allowed(mwaa_resources, service, op, par
     assert _check(mwaa_resources, ctx, service, op, params) is None
 
 
-def test_users_who_read_all_dags_keep_bucket_and_log_access(mwaa_resources):
+def test_users_who_read_all_dags_read_the_dag_folder_and_task_logs(mwaa_resources):
     ctx = parse_request(payload(context={"all_dags_readable": True})).context
     t = mwaa_resources
     assert (
-        _check(t, ctx, "s3", "GetObject", {"Bucket": "env-bucket", "Key": "startup.sh"})
+        _check(t, ctx, "s3", "GetObject", {"Bucket": "env-bucket", "Key": "dags/etl.py"})
         is None
     )
     assert (
-        _check(
-            t,
-            ctx,
-            "logs",
-            "FilterLogEvents",
-            {"logGroupName": "airflow-env1-Scheduler"},
-        )
+        _check(t, ctx, "s3", "ListObjectsV2", {"Bucket": "env-bucket", "Prefix": "dags/"})
         is None
+    )
+    assert _check(t, ctx, "s3", "GetBucketVersioning", {"Bucket": "env-bucket"}) is None
+    assert (
+        _check(t, ctx, "logs", "FilterLogEvents", {"logGroupName": TASK}) is None
     )
     query = {
         "logGroupName": TASK,
@@ -729,6 +727,44 @@ def test_users_who_read_all_dags_keep_bucket_and_log_access(mwaa_resources):
         "endTime": 2,
     }
     assert _check(t, ctx, "logs", "StartQuery", query) is None
+
+
+@pytest.mark.parametrize(
+    "service,op,params",
+    [
+        # Reading every DAG is not the right to read the rest of the bucket: Airflow shows no role these.
+        ("s3", "GetObject", {"Bucket": "env-bucket", "Key": "startup.sh"}),
+        ("s3", "GetObject", {"Bucket": "env-bucket", "Key": "requirements.txt"}),
+        ("s3", "GetObjectVersion", {"Bucket": "env-bucket", "Key": "plugins.zip"}),
+        ("s3", "HeadObject", {"Bucket": "env-bucket", "Key": "dagsx/etl.py"}),
+        ("s3", "GetObject", {"Bucket": "env-bucket", "Key": "dags/../startup.sh"}),
+        ("s3", "ListObjectsV2", {"Bucket": "env-bucket"}),
+        ("s3", "ListObjectsV2", {"Bucket": "env-bucket", "Prefix": "dags"}),
+        ("s3", "ListObjectsV2", {"Bucket": "env-bucket", "Prefix": ""}),
+        ("s3", "GetObject", {"Bucket": "other-bucket", "Key": "dags/etl.py"}),
+        ("logs", "FilterLogEvents", {"logGroupName": "airflow-env1-Scheduler"}),
+        ("logs", "FilterLogEvents", {"logGroupName": "airflow-env1-DAGProcessing"}),
+        ("logs", "GetLogEvents", {"logGroupName": "airflow-env1-WebServer"}),
+        ("logs", "DescribeLogStreams", {"logGroupName": "airflow-env1-Worker"}),
+        (
+            "logs",
+            "StartQuery",
+            {
+                "logGroupNames": [TASK, "airflow-env1-Scheduler"],
+                "queryString": "fields @message",
+                "startTime": 1,
+                "endTime": 2,
+            },
+        ),
+    ],
+)
+def test_users_who_read_all_dags_get_nothing_outside_the_dag_folder_and_task_logs(
+    mwaa_resources, service, op, params
+):
+    ctx = parse_request(payload(context={"all_dags_readable": True})).context
+    error = _check(mwaa_resources, ctx, service, op, params)
+    assert error
+    assert "administrator" in error or "pinned environment" in error
 
 
 def test_aws_api_scope_denial_happens_before_any_aws_call(

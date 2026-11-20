@@ -16,7 +16,9 @@ Parameters:
     Description: The MWAA environment the agent serves. The agent rejects requests for any other environment.
   MwaaSourceBucketName:
     Type: String
-    Description: The environment's S3 bucket (DAGs, plugins, requirements). The agent gets read-only access.
+    Description: >-
+      The environment's S3 bucket. The agent can read only its DAG folder (MwaaDagS3Path), not requirements,
+      plugins or the startup script.
   MwaaExecutionRoleName:
     Type: String
     Default: ""
@@ -76,7 +78,9 @@ Parameters:
     Type: String
     Default: dags
     AllowedPattern: "^[A-Za-z0-9][A-Za-z0-9_./-]{0,200}$"
-    Description: The environment's DagS3Path (folder in MwaaSourceBucketName). Used only with EnableDagAuthoring.
+    Description: >-
+      The environment's DagS3Path (folder in MwaaSourceBucketName). The agent can read only this folder of the
+      bucket, and with EnableDagAuthoring write to it.
   TeamDagFolders:
     Type: CommaDelimitedList
     Default: ""
@@ -186,24 +190,31 @@ Resources:
                 Resource: !Sub
                   - "arn:${AWS::Partition}:airflow:${AWS::Region}:${AWS::AccountId}:role/${MwaaEnvironmentName}/${AirflowRole}"
                   - AirflowRole: !If [AirflowOperations, User, Viewer]
-              - Sid: EnvironmentLogs
+              - Sid: TaskLogs # task logs only: the other log groups mix every DAG's and team's events
                 Effect: Allow
                 Action: [logs:FilterLogEvents, logs:GetLogEvents, logs:DescribeLogStreams, logs:StartQuery]
                 Resource:
-                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:airflow-${MwaaEnvironmentName}-*"
-                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:airflow-${MwaaEnvironmentName}-*:*"
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:airflow-${MwaaEnvironmentName}-Task"
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:airflow-${MwaaEnvironmentName}-Task:*"
               - Sid: LogsQueryResults # no resource-level support
                 Effect: Allow
                 Action: [logs:GetQueryResults, logs:DescribeLogGroups]
                 Resource: "*"
-              - Sid: EnvironmentBucketList
+              - Sid: EnvironmentBucketVersioning
                 Effect: Allow
-                Action: [s3:ListBucket, s3:GetBucketVersioning]
+                Action: s3:GetBucketVersioning
                 Resource: !Sub "arn:${AWS::Partition}:s3:::${MwaaSourceBucketName}"
-              - Sid: EnvironmentBucketRead
+              - Sid: DagFolderList # DAG folder only: not requirements, plugins or the startup script
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${MwaaSourceBucketName}"
+                Condition:
+                  StringLike:
+                    s3:prefix: !Sub "${MwaaDagS3Path}/*"
+              - Sid: DagFolderRead
                 Effect: Allow
                 Action: [s3:GetObject, s3:GetObjectVersion]
-                Resource: !Sub "arn:${AWS::Partition}:s3:::${MwaaSourceBucketName}/*"
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${MwaaSourceBucketName}/${MwaaDagS3Path}/*"
               - Sid: Metrics # collection-level actions
                 Effect: Allow
                 Action: [cloudwatch:GetMetricData, cloudwatch:ListMetrics, cloudwatch:DescribeAlarms]

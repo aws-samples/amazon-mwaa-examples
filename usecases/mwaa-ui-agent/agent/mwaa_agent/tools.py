@@ -704,6 +704,40 @@ def _team_folder_read_error(
     return f"readable team folders: {allowed}"
 
 
+_S3_OBJECT_READS = ("GetObject", "GetObjectVersion", "HeadObject")
+
+
+def _dag_folder_read_error(
+    ctx: SessionContext, operation: str, params: dict[str, Any]
+) -> str | None:
+    """None if this read of the environment's source bucket stays inside its DAG folder, else why not.
+
+    The rest of the bucket holds requirements.txt, plugins.zip and the startup script, which Airflow does not
+    let any role read, so not even users who can read every DAG get them through the agent.
+    """
+    if operation == "GetBucketVersioning":
+        return None  # bucket metadata, no object content
+    folder = _RESOURCES.environment(ctx)["dag_s3_path"]
+    if operation == "ListObjectsV2":
+        path = params.get("Prefix")
+    elif operation in _S3_OBJECT_READS:
+        path = params.get("Key")
+    else:
+        return f"{operation} is not available on the environment's bucket"
+    if (
+        folder
+        and isinstance(path, str)
+        and ".." not in path.split("/")
+        and path.startswith(folder + "/")
+    ):
+        return None
+    return (
+        f"S3 reads are limited to the DAG folder (s3://{_RESOURCES.environment(ctx)['bucket']}/{folder}/); "
+        "requirements, plugins and the startup script are not readable through the agent, so ask an "
+        "administrator to check them"
+    )
+
+
 def _airflow_api_disabled(ctx: SessionContext) -> bool:
     """The agent does not call the Airflow REST API on Identity Center environments, unless the runtime is
     configured to (AIRFLOW_API_WITH_IDENTITY_CENTER=true)."""
@@ -726,10 +760,10 @@ def _validate_dag_scoped_reads(
 ) -> str | None:
     """Keep S3 and CloudWatch Logs reads inside the user's DAG scope.
 
-    Users who can read every DAG may read the whole bucket and all environment log groups. Other users
-    can only reach the bucket and logs through their own DAGs: the bucket holds every DAG's source plus
-    the startup script and requirements, and the Scheduler, DAGProcessing, WebServer and Worker log groups
-    mix events from all DAGs. For them, only per-DAG streams in the Task log group are readable.
+    _validate_aws_resource has already limited S3 to the DAG folders and logs to the Task log group. Users
+    who can read every DAG may read all of those. Other users can only reach them through their own DAGs:
+    the DAG folder holds every DAG's source, so for them only their own team folders and the per-DAG streams
+    in the Task log group are readable.
     """
     if _reads_all_dags(ctx):
         return None
@@ -743,9 +777,8 @@ def _validate_dag_scoped_reads(
             else "Only the DAG folders of the user's own teams can be read"
         )
         return (
-            "S3 reads need read access to all DAGs, because the bucket holds every DAG's source and the "
-            f"environment's startup script and requirements. {hint}"
-            + (f" ({team_error})" if team_error else "")
+            "S3 reads of the DAG folder need read access to all DAGs, because it holds every DAG's source. "
+            f"{hint}" + (f" ({team_error})" if team_error else "")
         )
     if service != "logs" or operation == "GetQueryResults":
         return None
@@ -794,22 +827,18 @@ def _validate_aws_resource(
         return "GetEnvironment may only target the pinned MWAA environment"
     if service == "s3":
         # _team_folder_read_error returns None only for a read inside one of the user's team folders; ""
-        # (no team folders) and a reason both mean "not allowed" outside the source bucket.
-        if (
-            params.get("Bucket") != env["bucket"]
-            and _team_folder_read_error(ctx, operation, params) is not None
-        ):
-            return "S3 reads may only target the pinned environment's source bucket or your team's DAG folder"
+        # (no team folders) and a reason both mean "not allowed".
+        if _team_folder_read_error(ctx, operation, params) is not None:
+            if params.get("Bucket") != env["bucket"]:
+                return "S3 reads may only target the pinned environment's DAG folder or your team's DAG folder"
+            folder_error = _dag_folder_read_error(ctx, operation, params)
+            if folder_error:
+                return folder_error
         if env["account"]:
             params["ExpectedBucketOwner"] = env["account"]
     if service == "logs":
-        allowed = {
-            f"airflow-{ctx.environment_name}-DAGProcessing",
-            f"airflow-{ctx.environment_name}-Scheduler",
-            f"airflow-{ctx.environment_name}-Task",
-            f"airflow-{ctx.environment_name}-WebServer",
-            f"airflow-{ctx.environment_name}-Worker",
-        }
+        # Only task logs. The Scheduler, DAGProcessing, WebServer and Worker groups hold component logs that
+        # Airflow shows to no role, and that mix events from every DAG and team.
         groups: list[str] = []
         for key in ("logGroupName", "logGroupIdentifier"):
             if key in params:
@@ -828,13 +857,12 @@ def _validate_aws_resource(
                 for v in params.get(key, [])
             )
         if operation != "GetQueryResults" and (
-            not groups or any(group not in allowed for group in groups)
+            not groups or any(group != task_group for group in groups)
         ):
-            return "CloudWatch Logs calls must name an exact log group for the pinned environment"
-        if not _reads_all_dags(ctx) and any(g != task_group for g in groups):
             return (
-                "this user can read only some DAGs, so CloudWatch Logs access is limited to the Task "
-                f"log group ({task_group}); the other log groups mix events from all DAGs"
+                f"CloudWatch Logs access is limited to the Task log group ({task_group}); the scheduler, "
+                "DAG processor, webserver and worker logs are not readable through the agent, so ask an "
+                "administrator to check them"
             )
         if operation == "StartQuery":
             if len(str(params.get("queryString", ""))) > 4096:
