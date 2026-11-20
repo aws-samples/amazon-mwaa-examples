@@ -134,6 +134,15 @@ Airflow 3.2 introduced the `react_apps` `base` destination and shared React
 globals used by the global launcher. The plugin selects the integration at
 import time based on the installed Airflow version.
 
+**Who sees the entry points.** The Airflow UI builds the launcher, the
+**Browse** entry and the tabs from `GET /api/v2/plugins`, which needs
+`can read on Plugins`. Of the built-in roles only `Op` and `Admin` have it, so
+`Viewer` and `User` users, and custom roles copied from them, see no **AI
+Agent** entry anywhere. The agent itself still works for them at
+`https://<webserver>/mwaa-agent/`, with their own permissions. To show the
+entry points, add `can read on Plugins` to those roles (or a role you assign
+alongside them). That also lets them list the environment's installed plugins.
+
 ## Repository layout
 
 ```text
@@ -910,7 +919,9 @@ After MWAA returns to `AVAILABLE`:
 5. Open the agent and verify that it reports the correct environment and Airflow
    version.
 6. Use a Viewer account and verify that the badge says **Read-only** and no
-   test-DAG suggestion appears.
+   test-DAG suggestion appears. Viewer has no `can read on Plugins`, so open
+   `/mwaa-agent/` directly unless you added that permission (see
+   [Airflow UI compatibility](#airflow-ui-compatibility)).
 7. Use an authorized User or Op account and verify that changes produce approval
    cards.
 8. Decline one action and confirm from the Airflow API or UI that no state
@@ -1158,6 +1169,13 @@ AWS session:
 Airflow imports every Python file under the plugin directory as a standalone
 module. Use absolute imports inside `mwaa_agent_ui`; relative imports produce
 `attempted relative import with no known parent package`.
+
+### Users do not see the AI Agent button or menu entry
+
+The Airflow UI shows plugin entry points only to users who can read plugins
+(`can read on Plugins`), which by default means `Op` and `Admin`. Add that
+permission to the user's role, or open `https://<webserver>/mwaa-agent/`
+directly. See [Airflow UI compatibility](#airflow-ui-compatibility).
 
 ### The plugin returns `401` or `403`
 
