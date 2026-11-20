@@ -21,10 +21,26 @@ Parameters:
       plugins or the startup script.
   MwaaExecutionRoleName:
     Type: String
-    Default: ""
+    AllowedPattern: "^[\\w+=,.@-]{1,64}$"
     Description: >-
-      Optional. Name (not ARN) of the environment's execution role. If set, this stack adds an inline policy to it
-      that allows invoking this runtime, which the plugin needs. Leave empty to add that permission yourself.
+      Name (not ARN) of the environment's execution role. The agent's IAM inspection is limited to this role.
+  AttachInvokePolicyToExecutionRole:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      If true, this stack adds an inline policy to the execution role that allows invoking this runtime, which
+      the plugin needs. Every DAG task can then invoke it too. If false, add that permission yourself.
+  EnableDownstreamJobInspection:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      Let the agent read the status of AWS Glue, Amazon EMR, Amazon Athena, Amazon Redshift Data API, AWS Step
+      Functions, AWS Batch, Amazon ECS and Amazon SageMaker jobs that DAG tasks start. Most of these actions
+      cannot be scoped to the environment's jobs (Resource "*"), and their responses include job arguments and
+      container environment variables, so a user who can name a job (for example in a DAG run conf) could read
+      any job's configuration in the account. Use true only in development and test.
   ArtifactBucket:
     Type: String
     Description: Bucket that holds the agent package (dist/agent.zip).
@@ -104,7 +120,8 @@ Conditions:
   TeamDagAuthoring: !And [!Condition DagAuthoring, !Condition HasTeamDagFolders]
   # With teams, deploy_dag refuses the global folder, so the global write grant is dropped.
   GlobalDagAuthoring: !And [!Condition DagAuthoring, !Not [!Condition HasTeamDagFolders]]
-  AttachInvokePolicy: !Not [!Equals [!Ref MwaaExecutionRoleName, ""]]
+  AttachInvokePolicy: !Equals [!Ref AttachInvokePolicyToExecutionRole, "true"]
+  DownstreamJobInspection: !Equals [!Ref EnableDownstreamJobInspection, "true"]
   HasModelRegion: !Not [!Equals [!Ref ModelRegion, ""]]
   HasArtifactVersion: !Not [!Equals [!Ref ArtifactVersionId, ""]]
 
@@ -231,38 +248,39 @@ Resources:
                   - iam:ListRolePolicies
                   - iam:GetRolePolicy
                   - iam:SimulatePrincipalPolicy
-                # Scoped to the execution role when its name is given (with or without a path such as
-                # service-role/, but not other roles whose names merely end the same); otherwise any role.
-                Resource: !If
-                  - AttachInvokePolicy
-                  - - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${MwaaExecutionRoleName}"
-                    - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*/${MwaaExecutionRoleName}"
-                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*"
+                # The execution role, with or without a path such as service-role/, but not other roles whose
+                # names merely end the same.
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${MwaaExecutionRoleName}"
+                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*/${MwaaExecutionRoleName}"
               - Sid: ManagedPolicyRead
                 Effect: Allow
                 Action: [iam:GetPolicy, iam:GetPolicyVersion]
                 Resource:
                   - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/*"
                   - !Sub "arn:${AWS::Partition}:iam::aws:policy/*"
-              - Sid: DownstreamJobStatus # status of jobs that DAG tasks start
-                Effect: Allow
-                Action:
-                  - glue:GetJob
-                  - glue:GetJobRun
-                  - glue:GetJobRuns
-                  - emr-serverless:GetApplication
-                  - emr-serverless:GetJobRun
-                  - elasticmapreduce:DescribeCluster
-                  - elasticmapreduce:DescribeStep
-                  - elasticmapreduce:ListSteps
-                  - athena:GetQueryExecution
-                  - redshift-data:DescribeStatement
-                  - states:DescribeExecution
-                  - batch:DescribeJobs
-                  - ecs:DescribeTasks
-                  - sagemaker:DescribeTrainingJob
-                  - sagemaker:DescribeProcessingJob
-                Resource: "*"
+              - !If
+                - DownstreamJobInspection
+                - Sid: DownstreamJobStatus # status of jobs that DAG tasks start; opt-in, see the parameter
+                  Effect: Allow
+                  Action:
+                    - glue:GetJob
+                    - glue:GetJobRun
+                    - glue:GetJobRuns
+                    - emr-serverless:GetApplication
+                    - emr-serverless:GetJobRun
+                    - elasticmapreduce:DescribeCluster
+                    - elasticmapreduce:DescribeStep
+                    - elasticmapreduce:ListSteps
+                    - athena:GetQueryExecution
+                    - redshift-data:DescribeStatement
+                    - states:DescribeExecution
+                    - batch:DescribeJobs
+                    - ecs:DescribeTasks
+                    - sagemaker:DescribeTrainingJob
+                    - sagemaker:DescribeProcessingJob
+                  Resource: "*"
+                - !Ref AWS::NoValue
               - Sid: NetworkAndAuditRead # collection-level Describe actions
                 Effect: Allow
                 Action:
@@ -342,6 +360,7 @@ Resources:
         MWAA_AGENT_SKILLS: !Ref EnabledSkills
         ENABLE_AIRFLOW_OPERATIONS: !If [AirflowOperations, "true", "false"]
         ENABLE_DAG_DEPLOY: !If [DagAuthoring, "true", "false"]
+        ENABLE_DOWNSTREAM_JOB_INSPECTION: !If [DownstreamJobInspection, "true", "false"]
         LOG_LEVEL: INFO
 
   ExecutionRoleInvokePolicy:

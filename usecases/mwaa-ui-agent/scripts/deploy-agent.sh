@@ -16,6 +16,8 @@
 #   MODEL_ID            Bedrock model or inference profile ID
 #   MODEL_REGION        Region for Bedrock calls (defaults to the stack Region)
 #   ENABLED_SKILLS      comma-separated skills (default debugging-mwaa-workflow,testing-mwaa-workflow)
+#   ENABLE_DOWNSTREAM_JOB_INSPECTION=true  let the agent read Glue/EMR/Batch/SageMaker/... job status; these
+#                                  IAM actions need Resource "*" and return job arguments (dev/test only)
 #   ENABLE_AIRFLOW_OPERATIONS=true let the agent trigger, clear and pause runs after approval (dev/test only);
 #                                  without it the agent calls Airflow as Viewer and is read-only for everyone
 #   ENABLE_DAG_AUTHORING=true      let Airflow administrators deploy DAG files after approval (dev/test only);
@@ -80,8 +82,18 @@ params=(
   "ArtifactKey=${KEY}"
   "ArtifactVersionId=${VERSION_ID}"
   "MwaaDagS3Path=${DAG_S3_PATH%/}"
+  "MwaaExecutionRoleName=${EXEC_ROLE_NAME}"
 )
-[[ "${ATTACH_TO_EXECUTION_ROLE:-false}" == "true" ]] && params+=("MwaaExecutionRoleName=${EXEC_ROLE_NAME}")
+if [[ "${ATTACH_TO_EXECUTION_ROLE:-false}" == "true" ]]; then
+  params+=("AttachInvokePolicyToExecutionRole=true")
+else
+  params+=("AttachInvokePolicyToExecutionRole=false")
+fi
+if [[ "${ENABLE_DOWNSTREAM_JOB_INSPECTION:-false}" == "true" ]]; then
+  params+=("EnableDownstreamJobInspection=true")
+else
+  params+=("EnableDownstreamJobInspection=false")
+fi
 if [[ "${ENABLE_AIRFLOW_OPERATIONS:-false}" == "true" ]]; then
   params+=("EnableAirflowOperations=true")
 else

@@ -41,6 +41,8 @@ Tools
   also in CloudWatch: the Task log group in the profile, stream task_log_stream_format. To inspect a downstream
   job (Glue, EMR, ECS, SageMaker), take its name from the task's rendered_fields, XCom, or the DAG source; a name
   that appears only in log text is refused. Run IDs (Glue run, EMR step, Athena query) may come from the log.
+  Downstream job calls work only when downstream_job_inspection is true in the profile; otherwise name the job
+  and its run ID for the user and say where to look, without calling aws_api for it.
 - read_skill_file: the skills' reference files.
 - list_dag_files and read_dag_file: the Python files in the DAG folder the user may read (paths relative to
   it; on team environments pass team=). Use them when /dagSources has nothing, for example a file that fails to

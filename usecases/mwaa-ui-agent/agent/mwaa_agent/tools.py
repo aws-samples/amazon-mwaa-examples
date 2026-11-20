@@ -198,6 +198,11 @@ def _execution_role_invoke_error(ctx: SessionContext) -> str | None:
     return error
 
 
+def downstream_inspection_enabled() -> bool:
+    """Whether aws_api may read the status of Glue, EMR, Batch, SageMaker and other jobs that tasks start."""
+    return os.environ.get("ENABLE_DOWNSTREAM_JOB_INSPECTION", "").lower() == "true"
+
+
 def deploy_block_reason(ctx: SessionContext) -> str | None:
     """Why deploy_dag cannot run on this runtime, independent of the user. None when it is available."""
     if not dag_deploy.deploy_enabled():
@@ -306,6 +311,7 @@ def environment_profile(ctx: SessionContext) -> dict[str, Any]:
                 for key, value in sorted(options.items())
             },
             "deploy_dag_available": deploy_block_reason(ctx) is None,
+            "downstream_job_inspection": downstream_inspection_enabled(),
         }
     )
 
@@ -988,6 +994,14 @@ def build_tools(
         decision = policy.check_aws(service, op)
         if not decision.allowed:
             return _deny(decision.reason)
+        if (
+            service,
+            op,
+        ) in policy.DOWNSTREAM_AWS_OPERATIONS and not downstream_inspection_enabled():
+            return _deny(
+                "inspecting downstream jobs is turned off on this agent runtime (EnableDownstreamJobInspection); "
+                "tell the user which job to check and where, from the task's rendered fields and log"
+            )
         if region and region != ctx.region:
             return _deny("cross-Region AWS calls are disabled")
         if not _REGION.fullmatch(ctx.region):

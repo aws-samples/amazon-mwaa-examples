@@ -784,6 +784,27 @@ def test_aws_api_scope_denial_happens_before_any_aws_call(
     assert out["error"] == "DeniedByAgentPolicy" and "/dagSources/" in out["message"]
 
 
+@pytest.mark.parametrize("service,op", sorted(policy.DOWNSTREAM_AWS_OPERATIONS))
+def test_downstream_job_inspection_is_off_unless_the_runtime_enables_it(
+    mwaa_resources, monkeypatch, tmp_path, service, op
+):
+    # These need Resource "*" in IAM and return job arguments and container environments, so a user who
+    # can steer a job name (a DAG run conf) could read any job's configuration. Off by default.
+    t = mwaa_resources
+    monkeypatch.delenv("ENABLE_DOWNSTREAM_JOB_INSPECTION", raising=False)
+
+    def no_aws(*_a, **_k):
+        raise AssertionError("AWS must not be called")
+
+    monkeypatch.setattr(t.boto3, "client", no_aws)
+    ctx = parse_request(payload(context={"all_dags_readable": True})).context
+    aws_api = {x.tool_name: x for x in build_tools(lambda: ctx, tmp_path)}["aws_api"]
+    out = json.loads(aws_api(service, op, {}))
+    assert out["error"] == "DeniedByAgentPolicy"
+    assert "EnableDownstreamJobInspection" in out["message"]
+    assert t.downstream_inspection_enabled() is False
+
+
 def test_downstream_resource_ids_require_authorized_provenance():
     from mwaa_agent.tools import Provenance, _validate_linked_resource
 

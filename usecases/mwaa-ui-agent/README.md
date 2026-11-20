@@ -327,6 +327,7 @@ Optional deployment variables:
 | `ATTACH_TO_EXECUTION_ROLE`    | `false`                              | If `true`, adds the runtime invoke policy to the MWAA execution role  |
 | `ENABLE_AIRFLOW_OPERATIONS`   | `false`                              | If `true`, the agent can trigger, clear and pause runs; dev and test only |
 | `ENABLE_DAG_AUTHORING`        | `false`                              | If `true`, enables [DAG authoring](#dag-authoring); needs `ENABLE_AIRFLOW_OPERATIONS`; dev and test only |
+| `ENABLE_DOWNSTREAM_JOB_INSPECTION` | `false`                         | If `true`, the agent reads Glue, EMR, Batch, SageMaker and other job status; dev and test only |
 
 `ENABLED_SKILLS` accepts `debugging-mwaa-workflow`, `testing-mwaa-workflow`,
 `authoring-mwaa-workflow`, and `upgrading-mwaa-environments`. The
@@ -668,7 +669,7 @@ The agent has no shell and no general filesystem tool.
 | Tool              | Capability and boundary                                                                                                                                                                                                                                             |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `airflow_api`     | Calls the target Airflow REST API. Reads are restricted to authorized DAGs. Mutation routes have typed request schemas and always require approval. Connections, Variables, configuration, users, roles, permissions, and arbitrary routes are blocked.             |
-| `aws_api`         | Calls an exact reviewed list of read-only AWS operations. Calls are Region-pinned. MWAA, S3, Logs, and IAM requests are scoped to the environment. Downstream job IDs must first appear in authorized Airflow or AWS context. AWS calls are disabled in local mode. |
+| `aws_api`         | Calls an exact reviewed list of read-only AWS operations. Calls are Region-pinned. MWAA, S3, Logs, and IAM requests are scoped to the environment. Downstream job reads are off unless enabled, and their IDs must first appear in authorized Airflow or AWS context. AWS calls are disabled in local mode. |
 | `read_skill_file` | Reads only files inside the installed skill directory, with canonical-path and response-size checks.                                                                                                                                                                |
 | `deploy_dag`      | Writes one DAG file to the top level of the DAG folder after approval of the full content. Off unless enabled; see [DAG authoring](#dag-authoring).                                                                                                                 |
 | `list_dag_files`  | Lists the `.py` files in the DAG folder the user may read (up to 500). See [Reading and linting DAG files](#reading-and-linting-dag-files).                                                                                                                         |
@@ -986,11 +987,16 @@ When Airflow's `core.multi_team` option is on, the agent behaves as follows:
 - The AWS tool uses exact canonical operation names instead of `Get*` or
   `Describe*` prefix matching.
 - AWS calls are Region-pinned and resource-scoped where the service permits it.
-- Downstream job reads require identifiers observed in authorized session
-  context. Resource names (Glue jobs, EMR and ECS clusters, SageMaker jobs, EC2
+- Downstream job reads are off unless the stack is deployed with
+  `EnableDownstreamJobInspection=true`
+  (`ENABLE_DOWNSTREAM_JOB_INSPECTION=true`). When on, they require identifiers
+  observed in authorized session context. Resource names (Glue jobs, EMR and ECS clusters, SageMaker jobs, EC2
   IDs) must come from structured data such as rendered fields, XCom, DAG source
   or an AWS response; text in task logs can only supply per-run IDs, so an
-  injected log line cannot open another team's job.
+  injected log line cannot open another team's job. This does not stop a user
+  who can trigger a DAG from naming any job in its run conf and reading that
+  job back, and most of these IAM actions cannot be scoped to the environment's
+  jobs, so only turn them on in development and test.
 - Model text and approval metadata receive a final redaction pass before
   reaching the browser.
 - The UI uses `textContent` and DOM text nodes instead of `innerHTML`.
@@ -1038,12 +1044,12 @@ Review `infra/agent-runtime.yaml` against your environment before deployment:
 - The runtime uses the Airflow `Viewer` role across the environment, or `User`
   with `EnableAirflowOperations=true`. Per-user DAG scope is enforced in code,
   not IAM.
-- Several downstream status APIs require `Resource: "*"` or are currently
-  granted account-wide. Remove services you do not use and add resource, tag, or
-  name-prefix conditions where supported.
-- If `MwaaExecutionRoleName` is not supplied, IAM inspection falls back to all
-  roles in the account. Pass and scope the exact execution-role ARN in a
-  production design.
+- With `EnableDownstreamJobInspection=true`, several downstream status APIs
+  are granted with `Resource: "*"`, and their responses include job arguments
+  and container environment variables. Remove services you do not use and add
+  resource, tag, or name-prefix conditions where supported.
+- IAM inspection is limited to the execution role named in
+  `MwaaExecutionRoleName`, which the deploy script reads from the environment.
 - The agent role reads only the environment's DAG folder
   (`<source-bucket>/<DagS3Path>/*`) and its `airflow-<env>-Task` log group. It
   cannot read `requirements.txt`, `plugins.zip`, the startup script, or the

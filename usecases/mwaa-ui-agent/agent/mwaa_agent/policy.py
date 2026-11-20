@@ -68,6 +68,31 @@ ALLOWED_AWS_OPERATIONS = frozenset(
 )
 
 
+# Status of jobs that DAG tasks start. IAM cannot scope most of these to the environment's jobs (Resource "*"),
+# and their responses carry job arguments and container environments, so they are off unless the deployment
+# turns them on (EnableDownstreamJobInspection).
+DOWNSTREAM_AWS_OPERATIONS = frozenset(
+    {
+        ("glue", "GetJob"),
+        ("glue", "GetJobRun"),
+        ("glue", "GetJobRuns"),
+        ("emr", "DescribeCluster"),
+        ("emr", "DescribeStep"),
+        ("emr", "ListSteps"),
+        ("emr-serverless", "GetApplication"),
+        ("emr-serverless", "GetJobRun"),
+        ("athena", "GetQueryExecution"),
+        ("redshift-data", "DescribeStatement"),
+        ("stepfunctions", "DescribeExecution"),
+        ("batch", "DescribeJobs"),
+        ("ecs", "DescribeTasks"),
+        ("sagemaker", "DescribeTrainingJob"),
+        ("sagemaker", "DescribeProcessingJob"),
+    }
+)
+assert DOWNSTREAM_AWS_OPERATIONS <= ALLOWED_AWS_OPERATIONS
+
+
 @dataclass(frozen=True)
 class Decision:
     allowed: bool
