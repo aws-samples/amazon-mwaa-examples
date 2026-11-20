@@ -488,14 +488,20 @@ request:
 | Required Airflow permissions              | Tier      | Agent capability                                                          |
 | ----------------------------------------- | --------- | ------------------------------------------------------------------------- |
 | Read at least one DAG                     | `read`    | Read authorized DAG state, logs, code, and related job status             |
-| Read and edit a DAG, plus create DAG runs | `operate` | All read functions plus approved trigger, pause, and unpause for that DAG |
+| Read and edit a DAG, plus create runs of that DAG | `operate` | All read functions plus approved trigger, pause, and unpause for that DAG |
+
+Every grant is checked DAG by DAG, through the auth manager's batch API. A check
+without a DAG ID can only narrow the result: with IAM Identity Center, every
+Permission Set allows DAG `GET` without a DAG ID, and fine-grained policies
+apply per DAG. A user counts as able to read all DAGs only if they have that
+global grant and can also read every DAG that exists.
 
 Within the `operate` tier, two changes need Airflow's own separate permissions,
 which the plugin checks as well: clearing tasks and setting task state need edit
-rights on task instances, and setting run state needs edit rights on DAG runs.
-The built-in User, Op and Admin roles have both. A custom role without them
-cannot gain them through the agent, even though the agent calls Airflow as the
-User role.
+rights on task instances, and setting run state needs edit rights on DAG runs,
+on every DAG the user can run. The built-in User, Op and Admin roles have both.
+A custom role without them cannot gain them through the agent, even though the
+agent calls Airflow as the User role.
 
 **Operations are off by default.** The `operate` tier applies only when the
 runtime is deployed with `EnableAirflowOperations=true`
@@ -936,9 +942,10 @@ Global DAGs form the `shared_dags` bundle, which every team sees.
 When Airflow's `core.multi_team` option is on, the agent behaves as follows:
 
 - **Scope.** The plugin takes the user's DAG scope only from per-DAG
-  authorization checks. Identity Center Permission Sets must allow DAG `GET`
-  without a DAG ID for the Airflow home page, so a check without a DAG ID says
-  nothing about teams and never grants access to all DAGs. The plugin also sends
+  authorization checks, which pass each DAG's team. Identity Center Permission
+  Sets must allow DAG `GET` without a DAG ID for the Airflow home page, so a
+  check without a DAG ID says nothing about teams and never grants access to
+  all DAGs. The plugin also sends
   the user's teams to the agent.
 - **Guidance.** The agent knows about team bundles, the moved worker paths
   (`/usr/local/airflow/dags/global-dags` and `.../per-team-dags/<team>`),

@@ -23,6 +23,15 @@ def settings_env(monkeypatch):
     monkeypatch.setenv("AIRFLOW__MWAA_AGENT__REGION", "eu-west-1")
 
 
+# The DAGs in the fake metadata database (access._dag_teams), unless a test sets its own.
+ENV_DAGS = ("a", "b")
+
+
+@pytest.fixture(autouse=True)
+def env_dags(monkeypatch):
+    monkeypatch.setattr(access_mod, "_dag_teams", lambda: dict.fromkeys(ENV_DAGS))
+
+
 def make_access(
     name="alice", tier="operate", readable=("etl",), runnable=("etl",), all_dags=False
 ):
@@ -283,14 +292,33 @@ class FakeAuthManager:
         self.roles_rights = roles_rights
         # (method, access_entity) -> bool for task-instance and DAG-run checks; defaults to can_create_runs.
         self.entity_rights = entity_rights or {}
+        # (method, access_entity, dag_id) -> bool: a per-DAG answer that overrides the ones above.
+        self.per_dag = {}
+        self.batches = 0
 
     def get_authorized_dag_ids(self, user, method="GET"):
         return set(self.readable if method == "GET" else self.editable)
 
     def is_authorized_dag(self, method, user, access_entity=None, details=None):
+        dag_id = details.id if details else None
+        if (method, access_entity, dag_id) in self.per_dag:
+            return self.per_dag[(method, access_entity, dag_id)]
         if (method, access_entity) in self.entity_rights:
             return self.entity_rights[(method, access_entity)]
         return self.global_read if method == "GET" else self.can_create_runs
+
+    def batch_is_authorized_dag(self, requests, *, user):
+        # Like BaseAuthManager: one answer for the whole batch.
+        self.batches += 1
+        return all(
+            self.is_authorized_dag(
+                method=r["method"],
+                user=user,
+                access_entity=r.get("access_entity"),
+                details=r.get("details"),
+            )
+            for r in requests
+        )
 
     def is_authorized_connection(self, method, user, details=None):
         return self.can_edit_connections
@@ -312,7 +340,7 @@ def test_dag_deploy_needs_operate_and_connection_rights(
     monkeypatch.setattr(
         access_mod,
         "get_auth_manager",
-        lambda: FakeAuthManager({"a"}, {"a"}, can_create, True, can_edit_connections),
+        lambda: FakeAuthManager({"a", "b"}, {"a", "b"}, can_create, True, can_edit_connections),
     )
     user = SimpleNamespace(get_id=lambda: 7, get_name=lambda: "bob")
     assert access_mod.resolve_access(user).can_deploy_dags is expected
@@ -342,8 +370,8 @@ def test_dag_deploy_needs_administrator_rights(monkeypatch, roles_rights, expect
         access_mod,
         "get_auth_manager",
         lambda: FakeAuthManager(
-            {"a"},
-            {"a"},
+            {"a", "b"},
+            {"a", "b"},
             True,
             True,
             can_edit_connections=True,
@@ -867,6 +895,121 @@ def test_multi_team_scope_comes_only_from_per_dag_lists(monkeypatch):
     ctx = app_mod.agent_context(access, load_settings(), app_mod.PageContext())
     assert ctx["multi_team"] is True and ctx["teams"] == ["DataEng-TeamA"]
     assert ctx["all_dags_readable"] is False and "team_a_etl" in ctx["readable_dags"]
+
+
+def test_identity_center_dag_get_without_id_does_not_mean_all_dags(monkeypatch):
+    # MWAA Identity Center Permission Sets allow DAG GET without a DAG id for everyone (home page), with or
+    # without teams. A user who can read only "a" must not get the DAG folder and every Task log stream.
+    monkeypatch.setattr(
+        access_mod,
+        "get_auth_manager",
+        lambda: FakeTeamAuthManager({"a"}, set(), False),
+    )
+    user = SimpleNamespace(get_id=lambda: 7, get_name=lambda: "ana")
+    access = access_mod.resolve_access(user)
+    assert access.multi_team is False
+    assert access.all_dags_readable is False and access.readable_dags == {"a"}
+
+
+def test_all_dags_readable_needs_every_dag_and_the_global_grant(monkeypatch):
+    user = SimpleNamespace(get_id=lambda: 7, get_name=lambda: "bob")
+    manager = FakeAuthManager({"a", "b"}, set(), False, global_read=True)
+    monkeypatch.setattr(access_mod, "get_auth_manager", lambda: manager)
+    assert access_mod.resolve_access(user).all_dags_readable is True
+    # A DAG the user cannot read exists: not all DAGs.
+    monkeypatch.setattr(access_mod, "_dag_teams", lambda: dict.fromkeys(["a", "b", "c"]))
+    assert access_mod.resolve_access(user).all_dags_readable is False
+
+    # The DAG list cannot be read: fail closed.
+    def broken():
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(access_mod, "_dag_teams", broken)
+    assert access_mod.resolve_access(user).all_dags_readable is False
+
+
+def test_run_rights_are_checked_dag_by_dag(monkeypatch):
+    from airflow.api_fastapi.auth.managers.models.resource_details import (
+        DagAccessEntity,
+    )
+
+    # The check without a DAG id says the user may create runs; the per-DAG check for "b" says no.
+    manager = FakeAuthManager({"a", "b"}, {"a", "b"}, True, global_read=True)
+    manager.per_dag[("POST", DagAccessEntity.RUN, "b")] = False
+    monkeypatch.setattr(access_mod, "get_auth_manager", lambda: manager)
+    user = SimpleNamespace(get_id=lambda: 7, get_name=lambda: "bob")
+    access = access_mod.resolve_access(user)
+    assert access.runnable_dags == {"a"} and access.tier == "operate"
+
+
+def test_edit_rights_must_hold_on_every_runnable_dag(monkeypatch):
+    from airflow.api_fastapi.auth.managers.models.resource_details import (
+        DagAccessEntity,
+    )
+
+    manager = FakeAuthManager({"a", "b"}, {"a", "b"}, True, global_read=True)
+    manager.per_dag[("PUT", DagAccessEntity.RUN, "b")] = False
+    monkeypatch.setattr(access_mod, "get_auth_manager", lambda: manager)
+    user = SimpleNamespace(get_id=lambda: 7, get_name=lambda: "bob")
+    access = access_mod.resolve_access(user)
+    assert access.runnable_dags == {"a", "b"}
+    assert access.can_edit_runs is False  # one flag for all runnable DAGs, so it needs all of them
+    assert access.can_edit_task_instances is True
+
+
+def test_per_dag_checks_batch_and_split_only_on_refusal(monkeypatch):
+    from airflow.api_fastapi.auth.managers.models.resource_details import (
+        DagAccessEntity,
+    )
+
+    dags = {f"d{i:03}" for i in range(256)}
+    user = SimpleNamespace(get_id=lambda: 7, get_name=lambda: "bob")
+    manager = FakeAuthManager(dags, dags, True)
+    manager.per_dag[("POST", DagAccessEntity.RUN, "d100")] = False
+    found = access_mod._authorized_dags(
+        manager, user, frozenset(dags), {}, "POST", DagAccessEntity.RUN
+    )
+    assert found == dags - {"d100"}
+    assert manager.batches <= 2 * 8 + 1  # about 2 log2(256), not 256 calls
+    manager.batches = 0
+    manager.per_dag.clear()
+    access_mod._authorized_dags(manager, user, frozenset(dags), {}, "POST", DagAccessEntity.RUN)
+    assert manager.batches == 1
+
+    class Failing(FakeAuthManager):
+        def batch_is_authorized_dag(self, requests, *, user):
+            raise RuntimeError("Verified Permissions unavailable")
+
+    assert (
+        access_mod._authorized_dags(
+            Failing(dags, dags, True), user, frozenset(dags), {}, "POST", DagAccessEntity.RUN
+        )
+        == frozenset()
+    )
+
+
+def test_per_dag_checks_pass_each_dags_team(monkeypatch):
+    from airflow.api_fastapi.auth.managers.models.resource_details import (
+        DagAccessEntity,
+    )
+
+    seen = []
+
+    class Recording(FakeAuthManager):
+        def batch_is_authorized_dag(self, requests, *, user):
+            seen.extend((r["details"].id, r["details"].team_name) for r in requests)
+            return True
+
+    user = SimpleNamespace(get_id=lambda: 7, get_name=lambda: "ana")
+    access_mod._authorized_dags(
+        Recording(set(), set(), True),
+        user,
+        frozenset({"team_a_etl", "shared_report"}),
+        {"team_a_etl": "DataEng-TeamA", "shared_report": None},
+        "POST",
+        DagAccessEntity.RUN,
+    )
+    assert sorted(seen) == [("shared_report", None), ("team_a_etl", "DataEng-TeamA")]
 
 
 def test_multi_team_flag_reads_airflow_config(monkeypatch):
